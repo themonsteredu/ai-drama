@@ -1,8 +1,10 @@
 import { CLASSIC_WORKS, getVariant } from "@/lib/seed";
 import type { AssetCategory, StageAsset, WorkId } from "@/lib/types";
 
+const stageAssetVersion = "20260812-roles-v2";
+
 function stageAssetUrl(publicPath: string) {
-  return `/api/stage-assets/${publicPath.replace(/^\/assets\//, "")}`;
+  return `/api/stage-assets/${publicPath.replace(/^\/assets\//, "")}?v=${stageAssetVersion}`;
 }
 
 const buildingByWork: Record<WorkId, { title: string; filePath: string }> = {
