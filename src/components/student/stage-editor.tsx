@@ -249,7 +249,6 @@ export function StageEditor({ team, studentId, setItems, confirmStage, onNext }:
                   <Image src={getStageAssetImage(stageAsset, item.pose)} alt="" fill unoptimized sizes={isBackground ? "900px" : "200px"} draggable={false} className={`pointer-events-none select-none ${isBackground ? "object-cover" : "object-contain"}`}/>
                   {lockedByOther ? <span className="absolute inset-0 grid place-items-center bg-slate-950/35 text-white"><LockKeyhole size={18}/></span> : null}
                   {!isBackground && selectedId === item.id ? <span className="absolute inset-x-1 bottom-1 rounded bg-slate-950/65 px-1 py-0.5 text-[9px] font-bold text-white">{stageAsset.title}</span> : null}
-                  {isCharacter && item.pose && item.pose !== "standing" ? <span className="absolute left-1 top-1 rounded-full bg-amber-300 px-2 py-0.5 text-[9px] font-black text-slate-950">{item.pose === "sitting" ? "앉기" : "무릎"}</span> : null}
                 </button>
               );
             })}
@@ -269,7 +268,7 @@ export function StageEditor({ team, studentId, setItems, confirmStage, onNext }:
                 <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-3">
                   <div className="mb-2 flex items-center gap-2 text-xs font-black text-amber-900"><PersonStanding size={15}/> 촬영 자세 지시</div>
                   <div className="grid grid-cols-3 gap-1.5">
-                    {([['standing', '서기'], ['sitting', '앉기'], ['kneeling', '무릎']] as const).map(([pose, label]) => (
+                    {([['standing', '서기'], ['sitting', '앉기'], ['kneeling', '무릎 앉기']] as const).map(([pose, label]) => (
                       <button key={pose} type="button" className={`min-h-9 rounded-xl border px-2 text-xs font-black ${(selected.pose === pose || (!selected.pose && pose === 'standing')) ? 'border-amber-500 bg-amber-400 text-slate-950' : 'border-amber-200 bg-white text-amber-900'}`} onClick={() => updateSelected({ pose })}>{label}</button>
                     ))}
                   </div>
