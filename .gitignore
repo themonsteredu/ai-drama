@@ -1,0 +1,13 @@
+node_modules/
+.next/
+out/
+.env
+.env.local
+.env.*.local
+*.log
+*.tsbuildinfo
+.vercel/
+coverage/
+public/generated/
+!.gitkeep
+tmp/
