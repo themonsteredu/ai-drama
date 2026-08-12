@@ -64,7 +64,7 @@ export function HomeHero() {
       <section className="shell grid min-h-[680px] items-center gap-12 py-16 lg:grid-cols-[.92fr_1.08fr] lg:py-20">
         <div>
           <span className="eyebrow">CLASSROOM FILM PRODUCTION</span>
-          <h1 className="display-serif mt-5 max-w-2xl text-[clamp(2.85rem,5.6vw,5.3rem)] leading-[1.03]">
+          <h1 className="display-serif mt-5 max-w-2xl text-[clamp(2.6rem,5vw,4.75rem)] leading-[1.11] tracking-[-0.035em]">
             고전문학을<br />읽는 데서 끝내지 않는다.
           </h1>
           <p className="mt-7 max-w-xl text-lg leading-8 text-[var(--muted)]">장면을 해석하고, 대사를 고쳐 쓰고, 직접 연기하고 촬영합니다. 복잡한 편집은 시스템이 맡고 학생의 해석과 표현은 화면에 그대로 남습니다.</p>
