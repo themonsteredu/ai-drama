@@ -1,7 +1,7 @@
 import { CLASSIC_WORKS, getVariant } from "@/lib/seed";
 import type { AssetCategory, StageAsset, WorkId } from "@/lib/types";
 
-const stageAssetVersion = "20260812-roles-v2";
+const stageAssetVersion = "20260812-poses-v1";
 
 function stageAssetUrl(publicPath: string) {
   return `/api/stage-assets/${publicPath.replace(/^\/assets\//, "")}?v=${stageAssetVersion}`;
@@ -99,6 +99,20 @@ export function getAssetsForWork(workId: WorkId) {
 
 export function getAsset(assetId: string) {
   return [...ASSET_MANIFEST, ...SHARED_ASSETS].find((item) => item.id === assetId);
+}
+
+export function getStageAssetImage(
+  stageAsset: StageAsset,
+  pose?: "standing" | "sitting" | "kneeling",
+) {
+  if (stageAsset.category !== "character" || !pose || pose === "standing") {
+    return stageAsset.filePath;
+  }
+
+  return stageAsset.filePath.replace(
+    "/characters/character-",
+    `/characters/poses/${pose}/character-`,
+  );
 }
 
 export function getCharacterPortrait(workId: WorkId, characterId: string) {

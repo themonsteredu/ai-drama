@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { Check, FlipHorizontal2, ImageIcon, Layers, LockKeyhole, Minus, PersonStanding, Plus, Redo2, Trash2, Undo2, Users } from "lucide-react";
-import { getAsset, getAssetsForWork } from "@/lib/assets/manifest";
+import { getAsset, getAssetsForWork, getStageAssetImage } from "@/lib/assets/manifest";
 import { useStageRealtime } from "@/hooks/use-stage-realtime";
 import type { AssetCategory, PresenceMember, StageItem, Team } from "@/lib/types";
 
@@ -231,8 +231,6 @@ export function StageEditor({ team, studentId, setItems, confirmStage, onNext }:
               const isBackground = stageAsset.category === "background";
               const isCharacter = stageAsset.category === "character";
               const lockedByOther = item.lockedBy && item.lockedBy !== member.id;
-              const poseScaleY = isCharacter && item.pose === "sitting" ? 0.76 : isCharacter && item.pose === "kneeling" ? 0.62 : 1;
-              const poseLift = isCharacter && item.pose === "sitting" ? 12 : isCharacter && item.pose === "kneeling" ? 20 : 0;
               return (
                 <button
                   type="button"
@@ -243,12 +241,12 @@ export function StageEditor({ team, studentId, setItems, confirmStage, onNext }:
                     left: `${item.x}%`,
                     top: `${item.y}%`,
                     zIndex: item.zIndex,
-                    transform: `translate(-50%, calc(-50% + ${poseLift}%)) rotate(${item.rotation}deg) scale(${isBackground ? item.scale : item.scale * 2.4}) scaleX(${item.facing === "left" ? -1 : 1}) scaleY(${poseScaleY})`,
+                    transform: `translate(-50%, -50%) rotate(${item.rotation}deg) scale(${isBackground ? item.scale : item.scale * 2.4}) scaleX(${item.facing === "left" ? -1 : 1})`,
                     transformOrigin: "center bottom",
                   }}
                   aria-label={`${stageAsset.title} 이동`}
                 >
-                  <Image src={stageAsset.filePath} alt="" fill unoptimized sizes={isBackground ? "900px" : "200px"} draggable={false} className={`pointer-events-none select-none ${isBackground ? "object-cover" : "object-contain"}`}/>
+                  <Image src={getStageAssetImage(stageAsset, item.pose)} alt="" fill unoptimized sizes={isBackground ? "900px" : "200px"} draggable={false} className={`pointer-events-none select-none ${isBackground ? "object-cover" : "object-contain"}`}/>
                   {lockedByOther ? <span className="absolute inset-0 grid place-items-center bg-slate-950/35 text-white"><LockKeyhole size={18}/></span> : null}
                   {!isBackground && selectedId === item.id ? <span className="absolute inset-x-1 bottom-1 rounded bg-slate-950/65 px-1 py-0.5 text-[9px] font-bold text-white">{stageAsset.title}</span> : null}
                   {isCharacter && item.pose && item.pose !== "standing" ? <span className="absolute left-1 top-1 rounded-full bg-amber-300 px-2 py-0.5 text-[9px] font-black text-slate-950">{item.pose === "sitting" ? "앉기" : "무릎"}</span> : null}
@@ -263,7 +261,7 @@ export function StageEditor({ team, studentId, setItems, confirmStage, onNext }:
           {selected && selectedAsset ? (
             <div className="mt-4">
               <div className="overflow-hidden rounded-2xl border border-[var(--line)] bg-slate-100">
-                <div className="relative aspect-square"><Image src={selectedAsset.filePath} alt={selectedAsset.title} fill unoptimized sizes="200px" className={selectedAsset.category === "background" ? "object-cover" : "object-contain p-3"}/></div>
+                <div className="relative aspect-square"><Image src={getStageAssetImage(selectedAsset, selected.pose)} alt={selectedAsset.title} fill unoptimized sizes="200px" className={selectedAsset.category === "background" ? "object-cover" : "object-contain p-3"}/></div>
                 <div className="bg-white p-3"><small className="text-[var(--muted)]">{categoryNames[selectedAsset.category]}</small><h3 className="mt-1 font-extrabold">{selectedAsset.title}</h3></div>
               </div>
               {selectedIsBackground ? <p className="mt-3 rounded-xl bg-blue-50 p-3 text-xs font-bold leading-5 text-blue-700">배경을 확대하면 무대 위에서 드래그해 원하는 촬영 구도로 옮길 수 있어요.</p> : null}
@@ -275,7 +273,7 @@ export function StageEditor({ team, studentId, setItems, confirmStage, onNext }:
                       <button key={pose} type="button" className={`min-h-9 rounded-xl border px-2 text-xs font-black ${(selected.pose === pose || (!selected.pose && pose === 'standing')) ? 'border-amber-500 bg-amber-400 text-slate-950' : 'border-amber-200 bg-white text-amber-900'}`} onClick={() => updateSelected({ pose })}>{label}</button>
                     ))}
                   </div>
-                  <p className="mt-2 text-[11px] leading-5 text-amber-800">무대판에 자세 표식을 남겨 실제 촬영 때 배우가 그대로 연기해요.</p>
+                  <p className="mt-2 text-[11px] leading-5 text-amber-800">버튼을 누르면 실제 자세 이미지로 바뀌고, 촬영할 자세도 함께 저장돼요.</p>
                 </div>
               ) : null}
               <div className="mt-4 grid grid-cols-2 gap-2">
