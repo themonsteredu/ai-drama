@@ -1,0 +1,48 @@
+name: MOAKIT PLAY check
+
+on:
+  push:
+    branches:
+      - feat/play-studio-foundation
+    paths:
+      - "apps/play-studio/**"
+      - "packages/stage-core/**"
+      - ".github/workflows/play-studio-check.yml"
+  pull_request:
+    paths:
+      - "apps/play-studio/**"
+      - "packages/stage-core/**"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/play-studio
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.16.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: apps/play-studio/package.json
+
+      - name: Install dependencies
+        run: pnpm install --ignore-workspace --no-frozen-lockfile
+
+      - name: Type check
+        run: pnpm typecheck
+
+      - name: Production build
+        run: pnpm build
