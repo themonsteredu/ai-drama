@@ -1,7 +1,0 @@
-{
-  "$schema": "https://openapi.vercel.sh/vercel.json",
-  "framework": "nextjs",
-  "installCommand": "pnpm --dir apps/play-studio install --ignore-workspace --no-frozen-lockfile",
-  "buildCommand": "pnpm --dir apps/play-studio build && rm -rf .next && cp -R apps/play-studio/.next .next",
-  "outputDirectory": ".next"
-}
