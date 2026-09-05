@@ -1,44 +1,43 @@
 # MOAKIT PLAY
 
-`ai-drama` 저장소 안에서 별도로 배포하는 자유 연극 제작 앱입니다. 기존 고전문학 영상연극 앱은 루트에 그대로 두고, 이 앱은 `apps/play-studio`를 Vercel Root Directory로 사용합니다.
+자유 연극 제작 앱. 기존 `ai-drama`는 루트 `src/`에 그대로 유지합니다.
 
-## 현재 구현
+## 구현 범위
 
-- 조립형 SVG 캐릭터 만들기: 피부색, 머리, 눈, 옷, 표정, 동작, 장식
-- 캐릭터 보관함과 무대 재사용
-- 교실·숲·우주·성·바닷가·빈 무대 배경
-- 소품, 말풍선, 생각풍선, 장면 설명 배치
-- 드래그 이동, 확대·축소, 회전, 앞뒤 순서, 복사, 삭제
-- 최대 6개 장면, 장면 복사·삭제
-- 실행 취소·다시 실행
-- 브라우저 자동 저장
-- 전체 화면 발표 모드
-- 모바일·태블릿·노트북 반응형 UI
+- 캐릭터 조립, 표정·자세·방향 변경, 캐릭터 보관함
+- 배경 6종, 오리지널 SVG 소품 12종, 대사·생각풍선·설명
+- 드래그, 키보드 선택·이동, 크기·회전·레이어·복사·삭제
+- 최대 6개 장면, 장면 이름·복사·삭제·썸네일
+- 실행 취소/다시 실행, 기기 내 자동 저장과 저장 실패 안내
+- 현재 장면 PNG(2560×1440), 전체 장면 모음 PNG
+- 장면별 A4 연극 기획서: 장면 이미지·배우·표정·동작·전체 대사·행동 메모
+- 작품 JSON 파일 백업과 검증 후 불러오기
+- 손상된 저장 내용 보존, 용량 초과 경고, 최대 2MB 작품 파일 검사
+- 발표 모드, 반응형 화면
 
-## 로컬 실행
+## 출력
 
-저장소 루트의 기존 pnpm workspace에 아직 편입하지 않은 독립 앱입니다. 기존 운영 앱의 lockfile과 빌드를 건드리지 않기 위한 1차 안전 조치입니다.
+`저장·출력`에서 작품 파일, 현재 장면 PNG, 전체 장면 PNG, A4 연극 기획서를 선택합니다.
+기획서 준비 후 `인쇄 / PDF 저장`을 누릅니다. 기획서는 장면별로 새 쪽에서 시작하며 긴 대사는 다음 쪽으로 이어집니다. 출력용 이름·학급·행동 메모는 이번 출력에만 적용됩니다.
+모든 작품 출력은 브라우저 안에서 수행하며 생성형 AI API를 호출하지 않습니다. 그림과 대사는 공유 렌더러를 사용합니다.
+
+## 실행과 검증
 
 ```bash
 cd apps/play-studio
 pnpm install --ignore-workspace --no-frozen-lockfile
-pnpm dev
+pnpm typecheck
+pnpm build
+pnpm exec playwright install chromium webkit
+pnpm test:ui
 ```
 
-## Vercel 설정
+브라우저 테스트는 Chromium/WebKit에서 PNG·출력·백업·저장 오류·반응형·기존 편집 기능을 검사하고 `qa-results`에 샘플을 남깁니다.
 
-- Git Repository: `themonsteredu/ai-drama`
-- Root Directory: `apps/play-studio`
-- Framework: Next.js
-- Install Command: `pnpm install --ignore-workspace --no-frozen-lockfile`
-- Build Command: `pnpm build`
+## 분리 배포
 
-`vercel.json`에 동일한 명령이 포함되어 있습니다.
+별도 Vercel 프로젝트의 Root Directory는 `apps/play-studio`이며 저장소 바깥 파일 포함 옵션으로 `packages/stage-core`를 읽도록 설정합니다. 루트 운영 앱에 PLAY 출력 설정을 덮어쓰지 않습니다.
 
-## 다음 단계
+## 아직 포함하지 않은 기능
 
-1. 실제 SVG/WebP 캐릭터·배경·소품 에셋팩 교체
-2. 장면 PNG와 A4 연극 기획서 출력
-3. 수업 코드·학생 작품·교사 대시보드 연결
-4. Supabase 저장 및 공동 편집
-5. 기존 `ai-drama` 무대 편집기를 `packages/stage-core`에 단계적으로 연결
+수업 코드·교사 대시보드·Supabase 저장·공동 편집·영상 출력은 별도 단계입니다. 현재 저장은 브라우저 저장과 작품 파일이며 서버 저장이 아닙니다. 캐릭터의 상세 미술 스타일과 배경 아트는 1차 그래픽입니다.
