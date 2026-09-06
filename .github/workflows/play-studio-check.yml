@@ -2,9 +2,9 @@ name: MOAKIT PLAY check
 on:
   push:
     branches: [feat/play-studio-foundation]
-    paths: ['apps/play-studio/**', 'packages/stage-core/**', 'scripts/play-studio-qa.mjs', '.github/workflows/play-studio-check.yml']
+    paths: ['apps/play-studio/**', 'packages/stage-core/**', 'scripts/play-studio-qa.mjs', 'scripts/play-drawings-qa.mjs', '.github/workflows/play-studio-check.yml']
   pull_request:
-    paths: ['apps/play-studio/**', 'packages/stage-core/**', 'scripts/play-studio-qa.mjs', '.github/workflows/play-studio-check.yml']
+    paths: ['apps/play-studio/**', 'packages/stage-core/**', 'scripts/play-studio-qa.mjs', 'scripts/play-drawings-qa.mjs', '.github/workflows/play-studio-check.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -38,6 +38,9 @@ jobs:
       - name: Browser, export and print checks
         working-directory: apps/play-studio
         run: pnpm test:ui
+      - name: Raster drawing, motion and storage checks
+        working-directory: apps/play-studio
+        run: node ../../scripts/play-drawings-qa.mjs
       - name: Save screenshots and output samples
         if: always()
         uses: actions/upload-artifact@v4
