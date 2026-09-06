@@ -1,4 +1,5 @@
 import type {ReactNode} from 'react';
+import './drawing-cutout-theme.css';
 export type CutoutIconName='photo'|'magic'|'eraser'|'restore'|'crop'|'check'|'sparkles'|'close'|'arrow'|'compare'|'zoom'|'undo'|'redo'|'plus'|'heart'|'bulb';
 /** Interface icons only; the child's original raster artwork is never replaced. */
 export function CutoutIcon({name}:{name:CutoutIconName}){
