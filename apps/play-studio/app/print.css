@@ -1,0 +1,4 @@
+/* Prevent the editor's page background from filling the final printed page. */
+@media print {
+  html, body, .play-print-root, .print-scene { background: #fff !important; }
+}
