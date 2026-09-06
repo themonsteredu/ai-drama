@@ -1,0 +1,27 @@
+/* The outer drawing editor has generic green button/label rules.
+   Keep the approved cutout palette independent of CSS chunk order. */
+.drawing-app .cutout-dialog button[aria-pressed=true]{background:#e8f3ff;border-color:#85b9f0;color:#1a69b6}
+.drawing-app .cutout-dialog button.cutout-pink{background:#ffe3ed;border-color:#ffc7da;color:#9e2852}
+.drawing-app .cutout-dialog button.cutout-pink[aria-pressed=true]{background:#ffe3ed;border-color:#f24d85;color:#9e2852;box-shadow:inset 0 0 0 2px #f24d85}
+.drawing-app .cutout-dialog button.cutout-green{background:linear-gradient(145deg,#16bf83,#0da672);border-color:#0da672;color:#fff}
+.drawing-app .cutout-dialog button.cutout-blue,.drawing-app .cutout-dialog button.cutout-primary{background:linear-gradient(145deg,#2795ff,#1078ec);border-color:#147fec;color:#fff}
+.drawing-app .cutout-dialog .cutout-brush-tools button.cutout-blue{background:#e0f1ff;color:#135d9c;border-color:#cce7ff}
+.drawing-app .cutout-dialog .cutout-brush-tools button.cutout-blue[aria-pressed=true]{border-color:#1683ef;box-shadow:inset 0 0 0 2px #1683ef}
+.drawing-app .cutout-dialog button.cutout-yellow{background:linear-gradient(140deg,#ffe76e,#ffd339);border-color:#f6ce3d;color:#674b00;font-weight:700}
+.drawing-app .cutout-dialog .cutout-kind button[aria-pressed=true]{background:#e7f2ff;border-color:#75b5ef;color:#1a69b6;box-shadow:none}
+.drawing-app .cutout-dialog .cutout-brush{margin:0;padding:0;border:0}
+.drawing-app .cutout-dialog .cutout-brush legend{margin:4px 0 7px;font-size:12px}
+.drawing-app .cutout-dialog .cutout-identity fieldset{margin:0;padding:0;border:0}
+.drawing-app .cutout-dialog .cutout-identity input[type=text]{border-color:#dce7f2;background:#f9fcff;color:var(--ink);font-size:16px;margin:5px 0 12px}
+.drawing-app .cutout-dialog .cutout-paper{display:flex;font-size:12px;line-height:1.6}
+.drawing-app .cutout-dialog .cutout-check{display:flex}
+.drawing-app .cutout-dialog .cutout-viewbar button{font-size:11px;background:#f3f7fb;border-color:transparent;color:var(--ink)}
+.drawing-app .cutout-dialog .cutout-tip details{margin-top:7px}
+.drawing-app .cutout-dialog .cutout-tip summary{padding:3px 0;font-size:10px}
+@media(max-width:760px){
+ .drawing-app .cutout-dialog .cutout-paper{font-size:11px}
+ .drawing-app .cutout-dialog .cutout-brush legend{float:left;margin:0 10px 0 0;font-size:11px}
+ .drawing-app .cutout-dialog .cutout-viewbar button{font-size:10px;padding:7px;min-height:38px}
+ .drawing-app .cutout-dialog .cutout-footer-actions>button{font-size:12px;min-width:0}
+ .drawing-app .cutout-dialog .cutout-footer-actions>.cutout-primary,.drawing-app .cutout-dialog .cutout-footer-actions>.cutout-yellow{font-size:12px;min-width:0}
+}
