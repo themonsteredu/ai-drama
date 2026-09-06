@@ -1,10 +1,13 @@
 'use client';
-import {bounded,drawingMotions,motionsFor,type DrawingMotion,type DrawingWeather} from '@/lib/drawing-project';
+import {bounded,drawingMotions,motionsFor,type DrawingMotion} from '@/lib/drawing-project';
 import type {useDrawingEditor} from './use-drawing-editor';
+
 export function DrawingControls({e}:{e:ReturnType<typeof useDrawingEditor>}){
   const disabled=!e.loaded||e.busy||e.playing;
   function motion(id:DrawingMotion){e.patchItem({motion:id});e.setDestination(false);}
-  return <aside className="draw-controls"><div className="draw-section-title"><small>03 / ACTION</small><h2>{e.selectedAsset?.name??'어떻게 움직일까?'}</h2></div>
+
+  return <aside className="draw-controls">
+    <div className="draw-section-title"><small>03 / ACTION</small><h2>{e.selectedAsset?.name??'어떻게 움직일까?'}</h2></div>
     {e.selected&&e.selectedAsset?<>
       <div className="draw-motion-grid">{drawingMotions.filter(m=>motionsFor(e.selectedAsset!.kind).includes(m.id)).map(m=><button type="button" key={m.id} disabled={disabled} aria-pressed={e.selected!.motion===m.id} onClick={()=>motion(m.id)}>{m.label}</button>)}</div>
       <p className="draw-help">{drawingMotions.find(m=>m.id===e.selected!.motion)?.description}</p>
@@ -16,9 +19,6 @@ export function DrawingControls({e}:{e:ReturnType<typeof useDrawingEditor>}){
       <label>이 그림의 대사<textarea disabled={disabled} maxLength={80} value={e.selected.speech} onChange={event=>e.patchItem({speech:event.target.value})} placeholder="무엇이라고 말할까요?"/></label>
       <details><summary>위치·겹침·복사</summary><div className="draw-pair"><button type="button" disabled={disabled} onClick={()=>e.patchItem({x:bounded(e.selected!.x-3,2,98)})}>위치 ←</button><button type="button" disabled={disabled} onClick={()=>e.patchItem({x:bounded(e.selected!.x+3,2,98)})}>위치 →</button><button type="button" disabled={disabled} onClick={()=>e.patchItem({y:bounded(e.selected!.y-3,5,98)})}>위치 ↑</button><button type="button" disabled={disabled} onClick={()=>e.patchItem({y:bounded(e.selected!.y+3,5,98)})}>위치 ↓</button><button type="button" disabled={disabled} onClick={()=>e.layer(-1)}>뒤로</button><button type="button" disabled={disabled} onClick={()=>e.layer(1)}>앞으로</button><button type="button" disabled={disabled} onClick={e.duplicate}>그림 복사</button><button type="button" disabled={disabled} onClick={e.remove}>무대에서 지우기</button></div></details>
     </>:<p className="draw-empty-help">무대의 그림을 누르면 움직임 버튼이 보여요.</p>}
-    <section className="draw-weather"><h3>무대에 날씨 넣기</h3><div className="draw-weather-grid">{([['none','없음'],['wind','바람'],['rain','비'],['snow','눈']] as [DrawingWeather,string][]).map(([id,label])=><button type="button" key={id} disabled={disabled} aria-pressed={e.scene.weather===id} onClick={()=>e.editScene({weather:id})}>{label}</button>)}</div>
-      {e.scene.weather!=='none'?<><div className="draw-pair"><button type="button" disabled={disabled} aria-pressed={e.scene.strength==='gentle'} onClick={()=>e.editScene({strength:'gentle'})}>살살</button><button type="button" disabled={disabled} aria-pressed={e.scene.strength==='strong'} onClick={()=>e.editScene({strength:'strong'})}>세게</button></div>{e.scene.weather!=='snow'?<div className="draw-pair"><button type="button" disabled={disabled} aria-pressed={e.scene.wind==='left'} onClick={()=>e.editScene({wind:'left'})}>← 방향</button><button type="button" disabled={disabled} aria-pressed={e.scene.wind==='right'} onClick={()=>e.editScene({wind:'right'})}>방향 →</button></div>:null}<p className="draw-help">바람을 넣으면 ‘식물’로 등록한 그림도 흔들려요.</p></>:null}
-    </section>
-    <details><summary>배경 색 바꾸기</summary><div className="draw-swatches">{['#f2f7f4','#dceefd','#fcebdc','#202d44','#ffffff'].map(color=><button type="button" key={color} style={{background:color}} aria-label={`배경색 ${color}`} aria-pressed={e.scene.background===color&&!e.scene.backgroundAssetId} disabled={disabled} onClick={()=>e.editScene({background:color,backgroundAssetId:undefined})}/>)}</div>{e.scene.backgroundAssetId?<div className="draw-pair"><button type="button" disabled={disabled} onClick={()=>e.editScene({backgroundFit:'contain'})}>그림 전체 보기</button><button type="button" disabled={disabled} onClick={()=>e.editScene({backgroundFit:'cover'})}>무대 채우기</button></div>:null}</details>
+    <p className="draw-privacy"><b>기본 배경·장식 효과·SVG 그림은 사용하지 않아요.</b><br/>배경도 왼쪽에서 직접 올린 JPG·PNG·WebP만 사용할 수 있어요.</p>
   </aside>;
 }
