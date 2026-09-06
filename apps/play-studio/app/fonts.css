@@ -1,0 +1,6 @@
+@font-face{font-family:'S-Core Dream';src:url('https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_six@1.2/S-CoreDream-4Regular.woff') format('woff');font-style:normal;font-weight:100 450;font-display:swap}
+@font-face{font-family:'S-Core Dream';src:url('https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_six@1.2/S-CoreDream-5Medium.woff') format('woff');font-style:normal;font-weight:451 599;font-display:swap}
+@font-face{font-family:'S-Core Dream';src:url('https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_six@1.2/S-CoreDream-6Bold.woff') format('woff');font-style:normal;font-weight:600 950;font-display:swap}
+.header-actions{flex-wrap:wrap;min-width:0}.header-actions>button{flex-shrink:0;white-space:nowrap}.stage-toolbar,.scene-tools{flex-wrap:wrap}.scene-tools{max-width:100%;min-width:0}.export-error{overflow-wrap:anywhere;word-break:normal;max-width:100%}
+@media(min-width:1201px){.app-header{grid-template-columns:220px minmax(180px,1fr) minmax(460px,.8fr)}}
+@media(max-width:700px){.app-header{grid-template-columns:1fr;gap:10px;padding:12px 16px}.header-center{min-width:0;width:100%;grid-column:auto}.header-actions{justify-content:flex-start;grid-column:auto}.project-title{min-width:0;max-width:100%}.stage-toolbar>div{max-width:100%}.scene-tools input{max-width:130px}}
