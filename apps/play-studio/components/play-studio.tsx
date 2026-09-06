@@ -76,8 +76,19 @@ export function PlayStudio(){
     const action=(value:StageProject)=>changeScene(value,updater);
     if(record)commit(action);else updateWithoutHistory(action);
   }
-  function undo(){const previous=past.at(-1);if(!previous)return;setPast(h=>h.slice(0,-1));setFuture(h=>[projectRef.current,...h].slice(0,30));setValue(touch(previous));setSelectedId(undefined);}
-  function redo(){const next=future[0];if(!next)return;setFuture(h=>h.slice(1));setPast(h=>[...h.slice(-29),projectRef.current]);setValue(touch(next));setSelectedId(undefined);}
+  function undo(){
+    const previous=past.at(-1);if(!previous)return;
+    // Capture now: React may execute the updater after setValue changes the ref.
+    const current=projectRef.current;
+    setPast(h=>h.slice(0,-1));setFuture(h=>[current,...h].slice(0,30));
+    setValue(touch(previous));setSelectedId(undefined);
+  }
+  function redo(){
+    const next=future[0];if(!next)return;
+    const current=projectRef.current;
+    setFuture(h=>h.slice(1));setPast(h=>[...h.slice(-29),current]);
+    setValue(touch(next));setSelectedId(undefined);
+  }
   function roomForItem(){if(activeScene.items.length<200)return true;window.alert('한 장면에는 200개까지 놓을 수 있어요. 새 장면을 만들어 주세요.');return false;}
   function addCharacterToScene(character:SavedCharacter){
     if(!roomForItem())return;const id=createStageId('character');
