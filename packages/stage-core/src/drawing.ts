@@ -3,7 +3,9 @@ export type DrawingKind = 'person' | 'animal' | 'plant' | 'nature' | 'prop' | 'b
 export type DrawingMotion = 'still' | 'move' | 'hop' | 'sway' | 'float' | 'swim' | 'bounce';
 export type DrawingSpeed = 'slow' | 'normal' | 'fast';
 export type DrawingWeather = 'none' | 'wind' | 'rain' | 'snow';
-export interface DrawingAsset { id: string; name: string; kind: DrawingKind; source: string; width: number; height: number; }
+/** Optional non-destructive editing metadata; version-1 projects without it still load. */
+export interface DrawingEdit { version: 1; original: string; mask: string; width: number; height: number; crop: {x: number; y: number; width: number; height: number}; }
+export interface DrawingAsset { id: string; name: string; kind: DrawingKind; source: string; width: number; height: number; edit?: DrawingEdit; }
 export interface DrawingItem {
   id: string; assetId: string; x: number; y: number; width: number;
   rotation: number; flipped: boolean; motion: DrawingMotion; speed: DrawingSpeed;

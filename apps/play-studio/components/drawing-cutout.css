@@ -1,0 +1,36 @@
+.cutout-dialog {border:0;border-radius:22px;padding:0;width:min(1040px,calc(100vw - 28px));max-width:none;max-height:calc(100dvh - 28px);color:#233349;background:#fff;box-shadow:0 28px 90px #12274540;font-family:'S-Core Dream',sans-serif;word-break:keep-all;overflow:auto;}
+.cutout-dialog::backdrop{background:#12223f85;backdrop-filter:blur(3px)}
+.cutout-dialog *{box-sizing:border-box}
+.cutout-dialog button{min-height:40px;border:1px solid #dce4ee;border-radius:11px;background:white;padding:8px 14px;cursor:pointer;font:inherit;font-size:13px;line-height:1.4;color:#24354b;touch-action:manipulation}
+.cutout-dialog button:disabled{opacity:.42;cursor:not-allowed}
+.cutout-dialog button[aria-pressed=true]{border-color:#2571e8;background:#edf5ff;color:#1551b1}
+.cutout-dialog .cutout-primary{background:#2178eb;border-color:#2178eb;color:white;font-weight:700}
+.cutout-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px 22px;border-bottom:1px solid #eaf0f5}
+.cutout-heading h2{margin:3px 0 0;font-size:20px;font-weight:600}.cutout-heading small{font-size:11px;color:#63778d;letter-spacing:.08em}
+.cutout-steps{display:flex;gap:8px;padding:13px 22px;margin:0;background:#f7faff;overflow-x:auto;list-style:none}
+.cutout-steps li{flex:1;display:flex;align-items:center;justify-content:center;gap:7px;white-space:nowrap;font-size:12px;color:#677c92}
+.cutout-steps b{display:grid;place-items:center;width:25px;height:25px;border-radius:50%;background:#e8eef6;color:#62758b;font-weight:600}
+.cutout-steps li.active{color:#155cb4}.cutout-steps li.active b{color:white;background:#257ded}
+.cutout-layout{display:grid;grid-template-columns:minmax(0,1fr) 258px;gap:20px;padding:18px 22px}
+.cutout-left{min-width:0}.cutout-tools{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:12px}
+.cutout-tools button{flex:1;padding:9px 8px}.cutout-tools .cutout-auto{background:#ecf8f4;color:#107b59;border-color:#b9e4d5}
+.cutout-scroll{overflow:auto;max-height:50dvh;min-height:220px;border:1px solid #dbe4ec;border-radius:12px;background:#eff3f7;overscroll-behavior:contain}
+.cutout-board{position:relative;min-width:100%;line-height:0;background-color:white;background-image:conic-gradient(#e5eaf0 25%,transparent 0 50%,#e5eaf0 0 75%,transparent 0);background-size:20px 20px;touch-action:none}
+.cutout-board canvas{display:block;width:100%;height:auto;touch-action:none;max-width:none}
+.cutout-crop-box{position:absolute;pointer-events:none;border:2px solid #2587f5;box-shadow:0 0 0 1800px #12305035}
+.cutout-dialog .cutout-handle{position:absolute;width:24px;height:24px;min-height:24px;padding:0;border-radius:6px;border:2px solid white;background:#2587f5;pointer-events:auto;touch-action:none;box-shadow:0 1px 7px #23456755}
+.cutout-handle.nw{left:-13px;top:-13px;cursor:nwse-resize}.cutout-handle.ne{right:-13px;top:-13px;cursor:nesw-resize}.cutout-handle.sw{left:-13px;bottom:-13px;cursor:nesw-resize}.cutout-handle.se{right:-13px;bottom:-13px;cursor:nwse-resize}
+.cutout-viewbar{display:flex;flex-wrap:wrap;align-items:center;gap:7px;margin-top:10px}.cutout-viewbar button{font-size:12px;padding:7px 10px}
+.cutout-brush{display:flex;align-items:center;gap:10px;font-size:12px;margin:10px 0}.cutout-brush input{width:150px;max-width:55%;accent-color:#2479e7}
+.cutout-help{font-size:12px;line-height:1.65;color:#697c91;margin:10px 0 0}.cutout-status{font-size:12px;line-height:1.6;min-height:20px;color:#176baa;margin:8px 0}
+.cutout-side{display:flex;flex-direction:column;gap:13px;min-width:0}.cutout-side label{font-size:12px;font-weight:500;line-height:1.6}
+.cutout-side input[type=text]{display:block;width:100%;min-height:42px;border:1px solid #dce4ee;border-radius:10px;margin-top:5px;padding:9px 10px;font:inherit;font-size:16px}
+.cutout-side fieldset{border:0;padding:0;margin:0}.cutout-side legend{font-size:13px;padding:0;margin-bottom:8px}
+.cutout-kind{display:grid;grid-template-columns:repeat(3,1fr);gap:5px}.cutout-kind button{padding:7px 3px;font-size:12px}
+.cutout-preview{background-color:white;background-image:conic-gradient(#e5eaf0 25%,transparent 0 50%,#e5eaf0 0 75%,transparent 0);background-size:16px 16px;min-height:116px;border:1px solid #e0e7ef;border-radius:12px;display:grid;place-items:center;padding:10px;overflow:hidden}
+.cutout-preview img{display:block;max-width:100%;height:115px;object-fit:contain}.cutout-preview-label{font-size:12px;margin:0;color:#52687f}
+.cutout-check{display:flex;align-items:center;gap:7px;font-size:12px!important}.cutout-check input{width:18px;height:18px;accent-color:#2479e7}
+.cutout-footer{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:15px 22px;background:#fafcff;border-top:1px solid #e3ebf4;position:sticky;bottom:0;z-index:2}.cutout-footer p{font-size:12px;line-height:1.6;color:#687d92;margin:0}.cutout-footer-actions{display:flex;gap:8px;flex-shrink:0}
+.cutout-error{background:#fff1ee;color:#a64032;border-radius:9px;padding:10px 12px;font-size:12px;line-height:1.6}.cutout-asset-wrap{display:grid;gap:5px;min-width:0}.draw-asset-grid .cutout-reedit{font-size:11px;padding:5px;min-height:30px}
+@media(max-width:700px){.cutout-dialog{width:calc(100vw - 12px);max-height:calc(100dvh - 12px);border-radius:15px}.cutout-heading{padding:13px}.cutout-heading h2{font-size:18px}.cutout-steps{padding:10px 12px;gap:10px}.cutout-steps li{font-size:11px}.cutout-steps b{width:21px;height:21px;flex-shrink:0}.cutout-layout{grid-template-columns:1fr;gap:12px;padding:13px}.cutout-side{display:grid;grid-template-columns:1fr 1fr;gap:10px}.cutout-side fieldset,.cutout-side .cutout-preview-label{grid-column:1/-1}.cutout-kind{grid-template-columns:repeat(6,minmax(0,1fr))}.cutout-kind button{min-width:0;font-size:11px}.cutout-preview{grid-column:2;grid-row:1;min-height:80px}.cutout-preview img{height:80px}.cutout-scroll{max-height:40dvh;min-height:180px}.cutout-board{min-width:100%}.cutout-tools button{font-size:12px;min-height:43px}.cutout-footer{padding:12px;gap:8px;flex-wrap:wrap}.cutout-footer p{font-size:11px}.cutout-footer-actions{margin-left:auto}.cutout-dialog .cutout-handle{width:28px;height:28px;min-height:28px}.cutout-help{font-size:11px}.cutout-viewbar{gap:5px}.cutout-viewbar button{font-size:11px;padding:6px 8px}}
+@media(prefers-reduced-motion:reduce){.cutout-dialog *{scroll-behavior:auto}}
