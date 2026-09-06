@@ -19,6 +19,12 @@ export function validRasterSource(v:unknown):v is string{
     return b.slice(0,4)==='RIFF'&&b.slice(8,12)==='WEBP';
   }catch{return false;}
 }
+function validEdit(v:unknown):boolean{
+  if(!record(v)||v.version!==1||!validRasterSource(v.original)||!validRasterSource(v.mask)||!v.mask.startsWith('data:image/png;'))return false;
+  if(!num(v.width,1,1600)||!num(v.height,1,1600)||!Number.isInteger(v.width)||!Number.isInteger(v.height)||!record(v.crop))return false;
+  const c=v.crop,w=v.width as number,h=v.height as number;
+  return num(c.x,0,w-1)&&num(c.y,0,h-1)&&num(c.width,1,w)&&num(c.height,1,h)&&['x','y','width','height'].every(k=>Number.isInteger(c[k]))&&(c.x as number)+(c.width as number)<=w&&(c.y as number)+(c.height as number)<=h;
+}
 export function validateDrawingProject(v:unknown):v is DrawingProject{
   if(!record(v)||v.format!=='moakit-drawing'||v.version!==1||!text(v.id,150)||!text(v.title,80)||!text(v.updatedAt,80))return false;
   if(!Array.isArray(v.assets)||v.assets.length>12||!ids(v.assets))return false;
@@ -26,6 +32,7 @@ export function validateDrawingProject(v:unknown):v is DrawingProject{
   for(const a of v.assets){
     if(!record(a)||!text(a.id,150)||!text(a.name,40)||!one(a.kind,['person','animal','plant','nature','prop','background'])||!num(a.width,1,1600)||!num(a.height,1,1600)||!validRasterSource(a.source))return false;
     bytes+=a.source.length;
+    if(a.edit!==undefined){if(!validEdit(a.edit))return false;const e=a.edit as Record<string,unknown>;bytes+=(e.original as string).length+(e.mask as string).length;}
   }
   if(bytes>10_000_000||!Array.isArray(v.scenes)||!v.scenes.length||v.scenes.length>6||!ids(v.scenes))return false;
   const assets=new Set(v.assets.map(a=>a.id));
