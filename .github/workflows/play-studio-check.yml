@@ -1,0 +1,56 @@
+name: MOAKIT PLAY check
+on:
+  push:
+    branches: [feat/play-studio-foundation]
+    paths: ['apps/play-studio/**', 'packages/stage-core/**', 'scripts/play-*.mjs', 'scripts/fixtures/**', '.github/workflows/play-studio-check.yml']
+  pull_request:
+    paths: ['apps/play-studio/**', 'packages/stage-core/**', 'scripts/play-*.mjs', 'scripts/fixtures/**', '.github/workflows/play-studio-check.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: play-studio-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.16.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install isolated app
+        working-directory: apps/play-studio
+        run: pnpm install --ignore-workspace --no-frozen-lockfile
+      - name: Type check
+        working-directory: apps/play-studio
+        run: pnpm typecheck
+      - name: Production build
+        working-directory: apps/play-studio
+        run: pnpm build
+      - name: Install test browsers
+        working-directory: apps/play-studio
+        run: pnpm exec playwright install --with-deps chromium webkit
+      - name: Browser, export and print checks
+        working-directory: apps/play-studio
+        run: pnpm test:ui
+      - name: Raster drawing, motion and storage checks
+        working-directory: apps/play-studio
+        run: node ../../scripts/play-drawings-qa.mjs
+      - name: Photo crop, restore and real background extraction
+        working-directory: apps/play-studio
+        run: node ../../scripts/play-cutout-qa.mjs
+      - name: Approved cutout colors and actual UI screenshots
+        working-directory: apps/play-studio
+        run: node ../../scripts/play-cutout-theme-qa.mjs
+      - name: Save screenshots and output samples
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: play-studio-qa
+          path: apps/play-studio/qa-results/
+          retention-days: 7
