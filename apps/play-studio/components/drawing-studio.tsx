@@ -1,51 +1,45 @@
 'use client';
-import Link from 'next/link';
-import {useRef} from 'react';
+import {useEffect,useRef,useState} from 'react';
 import {useDrawingEditor} from './use-drawing-editor';
 import {DrawingCanvas} from './drawing-canvas';
 import {DrawingLibrary} from './drawing-library';
 import {DrawingControls} from './drawing-controls';
+import {DrawingScenery} from './drawing-scenery';
 import {cutoutBytes} from '@/lib/drawing-cutout';
-import type {DrawingAsset} from '@/lib/drawing-project';
+import {loadDrawingImages} from '@/lib/drawing-media';
+import {drawDrawingScene} from '@/lib/drawing-renderer';
+import type {DrawingAsset,DrawingProject,DrawingScene} from '@/lib/drawing-project';
 import './drawing-studio.css';
-
+import './drawing-story-theme.css';
+function ScenePreview({project,scene}:{project:DrawingProject;scene:DrawingScene}){
+ const [url,setUrl]=useState('');
+ useEffect(()=>{let alive=true;void loadDrawingImages(project.assets).then(images=>{if(!alive)return;const canvas=document.createElement('canvas');canvas.width=256;canvas.height=144;const ctx=canvas.getContext('2d');if(!ctx)return;ctx.scale(.2,.2);drawDrawingScene(ctx,project,scene,images,0);setUrl(canvas.toDataURL('image/png'));}).catch(()=>{if(alive)setUrl('');});return()=>{alive=false;};},[project.assets,scene]);
+ return url?<img src={url} alt="장면 미리보기"/>:<span className="story-thumb-empty"/>;
+}
 export function DrawingStudio(){
-  const e=useDrawingEditor(),file=useRef<HTMLInputElement>(null),disabled=!e.loaded||e.busy,editingDisabled=disabled||e.playing;
-  function fits(assets:DrawingAsset[]){
-    if(assets.reduce((sum,a)=>sum+cutoutBytes(a),0)>10_000_000){e.setError('원본과 수정 정보를 합친 그림 용량이 커요. 더 작은 사진을 골라 주세요. 기존 그림은 그대로예요.');return false;}
-    return true;
-  }
-  function place(asset:DrawingAsset,isNew=false){if(isNew&&!fits([...e.project.assets,asset]))return false;return e.place(asset,isNew);}
-  function updateAsset(asset:DrawingAsset){const next=e.project.assets.map(a=>a.id===asset.id?asset:a);if(editingDisabled||!fits(next))return false;e.commit(p=>({...p,assets:p.assets.map(a=>a.id===asset.id?asset:a)}));e.setError('');return true;}
-
-  return <main className="drawing-app" onKeyDown={event=>{
-    const target=event.target as HTMLElement;
-    if(target.matches('input,textarea,select')||target.isContentEditable||target.closest('dialog'))return;
-    if(event.key==='Escape'){e.stop();e.setDestination(false);}
-    if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='z'){event.preventDefault();event.shiftKey?e.redo():e.undo();}
-  }}>
-    <header className="draw-header">
-      <Link href="/" className="draw-brand">MOAKIT <b>PLAY</b><small>내 그림 움직이기</small></Link>
-      <label className="draw-title"><span className="draw-sr">작품 제목</span><input aria-label="내 그림 작품 제목" value={e.project.title} maxLength={80} disabled={disabled} onChange={event=>e.commit(p=>({...p,title:event.target.value}))}/><small role="status">{e.saveState}</small></label>
-      <div className="draw-history"><button type="button" aria-label="실행 취소" disabled={disabled||!e.canUndo} onClick={e.undo}>↶</button><button type="button" aria-label="다시 실행" disabled={disabled||!e.canRedo} onClick={e.redo}>↷</button></div>
-    </header>
-    {e.error?<div className="draw-alert" role="alert"><span>{e.error}</span><button type="button" aria-label="안내 닫기" onClick={()=>e.setError('')}>×</button></div>:null}
-    <div className="draw-workspace">
-      <DrawingLibrary assets={e.project.assets} disabled={editingDisabled} onPlace={place} onUpdate={updateAsset} onError={e.setError}/>
-      <section className="draw-stage-column" aria-label="그림 무대 편집">
-        <div className="draw-stage-heading"><div><small>02 / MAKE IT MOVE</small><h1>내 그림이 살아 움직여요</h1></div><span>{e.project.scenes.findIndex(s=>s.id===e.scene.id)+1} / {e.project.scenes.length} 장면</span></div>
-        <div className={`draw-stage-frame ${e.destination?'choosing-destination':''}`}>
-          <DrawingCanvas project={e.project} scene={e.scene} playing={e.playing} reset={e.reset} selectedId={e.selectedId} clock={e.clock} onError={e.setError} onDown={e.down} onMove={e.move} onUp={e.up} onCancel={e.cancel}/>
-          {!e.scene.items.length&&!e.scene.backgroundAssetId?<div className="draw-stage-empty"><span>＋</span><strong>여기가 내 그림의 무대예요</strong><p>직접 그린 그림이나 사진을 올려 주세요.</p></div>:null}
-        </div>
-        <p className={`draw-stage-hint ${e.destination?'active':''}`} aria-live="polite">{e.destination?'무대에서 도착할 곳을 톡 눌러 주세요.':e.playing?'움직이는 중 · 멈추고 처음으로 돌아가면 다시 편집할 수 있어요.':'그림을 눌러 선택하고, 끌어서 놓으세요.'}</p>
-        <div className="draw-playbar"><button type="button" className="draw-primary" disabled={disabled||(!e.scene.items.length&&!e.scene.backgroundAssetId)} onClick={()=>{e.setDestination(false);e.setPlaying(!e.playing);}}>{e.playing?'Ⅱ 잠깐 멈춤':'▶ 움직여 보기'}</button><button type="button" disabled={disabled} onClick={e.stop}>■ 처음으로</button><span>움직임은 재생할 때만 보여요.</span></div>
-        <div className="draw-stage-items" aria-label="무대의 그림 목록">{e.scene.items.map(item=><button type="button" key={item.id} disabled={disabled} aria-pressed={e.selectedId===item.id} onClick={()=>e.chooseItem(item.id)}>{e.project.assets.find(a=>a.id===item.assetId)?.name??'그림'}</button>)}</div>
-        <div className="draw-scenes" aria-label="내 그림 장면 목록">{e.project.scenes.map((s,i)=><button type="button" key={s.id} aria-pressed={s.id===e.scene.id} disabled={disabled} onClick={()=>e.switchScene(s.id)}><small>{String(i+1).padStart(2,'0')}</small>{s.title}</button>)}<button type="button" disabled={disabled||e.project.scenes.length>=6} onClick={()=>e.addScene()}>＋ 장면</button></div>
-        <details className="draw-scene-settings"><summary>장면 이름과 설명</summary><label>장면 이름<input maxLength={40} disabled={editingDisabled} value={e.scene.title} onChange={event=>e.editScene({title:event.target.value})}/></label><label>장면 설명<textarea maxLength={120} disabled={editingDisabled} placeholder="예: 숲에서 작은 친구를 만났어요." value={e.scene.caption} onChange={event=>e.editScene({caption:event.target.value})}/></label><div className="draw-pair"><button type="button" disabled={editingDisabled} onClick={()=>e.addScene(true)}>장면 복사</button><button type="button" disabled={editingDisabled||e.project.scenes.length===1} onClick={e.deleteScene}>장면 지우기</button></div></details>
-      </section>
-      <DrawingControls e={e}/>
-    </div>
-    <footer className="draw-footer"><p><b>내 그림 그대로.</b> 그림 선택 → 동작 선택 → 움직여 보기</p><details><summary>작품 보관·불러오기</summary><div className="draw-file-actions"><button type="button" disabled={disabled} onClick={e.backup}>작품 파일 보관</button><button type="button" disabled={disabled} onClick={()=>file.current?.click()}>내 그림 작품 불러오기</button><button type="button" disabled={disabled} onClick={()=>void e.png()}>{e.busy?'처리 중':'현재 모습 PNG'}</button><button type="button" disabled={disabled} onClick={e.newWork}>새 작품</button></div><p>직접 올린 그림·움직임·사진 다듬기 원본을 함께 보관해요. 기본 SVG 그림이나 장식 효과는 포함하지 않아요.</p></details><input type="file" ref={file} accept=".json,application/json" hidden aria-label="내 그림 작품 파일 선택" onChange={event=>{const picked=event.target.files?.[0];event.target.value='';if(picked)void e.importWork(picked);}}/></footer>
-  </main>;
+ const e=useDrawingEditor(),file=useRef<HTMLInputElement>(null),root=useRef<HTMLElement>(null);
+ const [presenting,setPresenting]=useState(false),[mobileTab,setMobileTab]=useState('stage');
+ const disabled=!e.loaded||e.busy,editingDisabled=disabled||e.playing,index=e.project.scenes.findIndex(s=>s.id===e.scene.id);
+ function fits(assets:DrawingAsset[]){if(assets.reduce((sum,a)=>sum+cutoutBytes(a),0)>10_000_000){e.setError('원본과 수정 정보를 합친 그림 용량이 커요. 더 작은 사진을 골라 주세요. 기존 그림은 그대로예요.');return false;}return true;}
+ function place(asset:DrawingAsset,isNew=false){if(isNew&&!fits([...e.project.assets,asset]))return false;const ok=e.place(asset,isNew);if(ok)setMobileTab('stage');return ok;}
+ function updateAsset(asset:DrawingAsset){const next=e.project.assets.map(a=>a.id===asset.id?asset:a);if(editingDisabled||!fits(next))return false;e.commit(p=>({...p,assets:p.assets.map(a=>a.id===asset.id?asset:a)}));e.setError('');return true;}
+ function finishPresentation(){setPresenting(false);e.stop();}
+ const hasWork=e.scene.items.length>0||!!e.scene.backgroundAssetId||e.scene.weather!=='none';
+ return <main ref={root} className={`drawing-app story-studio ${presenting?'story-presenting':''}`} data-mobile-tab={mobileTab} onKeyDown={event=>{const target=event.target as HTMLElement;if(target.matches('input,textarea,select')||target.isContentEditable||target.closest('dialog'))return;if(event.key==='Escape'){finishPresentation();e.setDestination(false);}if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='z'){event.preventDefault();event.shiftKey?e.redo():e.undo();}}}>
+ <header className="story-header"><a href="/" className="story-wordmark" aria-label="MOAKIT PLAY">{'MOAKIT'.split('').map((c,i)=><span key={i} className={`letter-${i}`}>{c}</span>)}<b>PLAY</b></a><p className="story-mint">내가 그린 그림이 움직여요! <span aria-hidden="true">✦</span></p><div className="story-header-actions"><button type="button" disabled={disabled} onClick={e.backup}>작품 보관</button><button type="button" disabled={disabled} onClick={()=>file.current?.click()}>불러오기</button><button type="button" className="story-yellow" disabled={disabled||!hasWork} onClick={()=>{e.stop();setPresenting(true);setMobileTab('stage');}}>▶ 발표하기</button></div></header>
+ <div className="story-road" aria-label="이야기 만드는 순서">{[['사진 올리기','pink'],['그림 다듬기','orange'],['배경 고르기','green'],['움직임 넣기','blue'],['이야기 발표','purple']].map(([label,tone],i)=><div key={label} className={`story-road-step ${tone}`}><b>{i+1}</b><span>{label}</span></div>)}</div>
+ <div className="story-project-row"><label className="draw-title"><span className="draw-sr">작품 제목</span><input aria-label="내 그림 작품 제목" value={e.project.title} maxLength={80} disabled={disabled} onChange={event=>e.commit(p=>({...p,title:event.target.value}))}/><small role="status">{e.saveState}</small></label><div className="draw-history"><button type="button" aria-label="실행 취소" disabled={disabled||!e.canUndo} onClick={e.undo}>↶</button><button type="button" aria-label="다시 실행" disabled={disabled||!e.canRedo} onClick={e.redo}>↷</button><button type="button" disabled={disabled} onClick={()=>void e.png()}>PNG 저장</button></div></div>
+ {e.error?<div className="draw-alert" role="alert"><span>{e.error}</span><button type="button" aria-label="안내 닫기" onClick={()=>e.setError('')}>×</button></div>:null}
+ <nav className="story-mobile-tabs" aria-label="작업 화면">{[['stage','무대'],['pictures','그림·배경'],['actions','움직임·효과']].map(([id,label])=><button type="button" key={id} aria-pressed={mobileTab===id} onClick={()=>setMobileTab(id)}>{label}</button>)}</nav>
+ {presenting?<div className="story-presentation-bar"><strong>{e.project.title}</strong><span>{index+1} / {e.project.scenes.length}</span><button type="button" onClick={finishPresentation}>편집으로 돌아가기</button></div>:null}
+ <div className="draw-workspace"><div className="story-library-column"><DrawingLibrary assets={e.project.assets} disabled={editingDisabled} onPlace={place} onUpdate={updateAsset} onError={e.setError}/><DrawingScenery e={e} onPlace={place}/></div>
+ <section className="draw-stage-column" aria-label="그림 무대 편집"><div className="draw-stage-heading"><div><small>MY LITTLE STORY</small><h1>{e.scene.title}</h1></div><span>{index+1} / {e.project.scenes.length} 장면</span></div>
+ <div className={`draw-stage-frame ${e.destination?'choosing-destination':''}`}><DrawingCanvas project={e.project} scene={e.scene} playing={e.playing} reset={e.reset} selectedId={presenting?undefined:e.selectedId} clock={e.clock} onError={e.setError} onDown={presenting?()=>{}:e.down} onMove={presenting?()=>{}:e.move} onUp={presenting?()=>{}:e.up} onCancel={presenting?()=>{}:e.cancel}/>{!hasWork?<div className="draw-stage-empty"><img src="/play-scenes/dinosaur-photo.webp" alt="공룡 예시 사진"/><div><small>내 그림으로 시작하는 작은 모험</small><strong>어떤 친구를 만나 볼까요?</strong><p>그림을 올리고 배경을 꾸며 보세요.</p><button type="button" className="story-start-button" disabled={disabled} onClick={()=>{setMobileTab('pictures');root.current?.querySelector<HTMLInputElement>('input[aria-label="그림 파일 선택"]')?.click();}}>＋ 내 그림 올리기</button></div></div>:null}</div>
+ <p className={`draw-stage-hint ${e.destination?'active':''}`} aria-live="polite">{e.destination?'도착할 곳을 무대에서 톡 눌러 주세요.':e.playing?'움직이는 중이에요. 잠깐 멈추거나 처음으로 돌아갈 수 있어요.':'그림을 톡 눌러 선택하고, 손가락으로 옮겨요.'}</p>
+ <div className="draw-playbar"><button type="button" className="draw-primary" disabled={disabled||!hasWork} onClick={()=>{e.setDestination(false);e.setPlaying(!e.playing);}}>{e.playing?'Ⅱ 잠깐 멈춤':'▶ 움직여 보기'}</button><button type="button" disabled={disabled} onClick={e.stop}>■ 처음으로</button>{presenting?<><button type="button" disabled={index<1} onClick={()=>e.switchScene(e.project.scenes[index-1].id)}>이전 장면</button><button type="button" disabled={index>=e.project.scenes.length-1} onClick={()=>e.switchScene(e.project.scenes[index+1].id)}>다음 장면</button></>:<span>내 그림 그대로, 이야기가 시작돼요.</span>}</div>
+ <div className="draw-stage-items" aria-label="무대의 그림 목록">{e.scene.items.map(item=><button type="button" key={item.id} disabled={disabled} aria-pressed={e.selectedId===item.id} onClick={()=>{e.chooseItem(item.id);setMobileTab('actions');}}>{e.project.assets.find(a=>a.id===item.assetId)?.name??'그림'}</button>)}</div>
+ <div className="draw-scenes" aria-label="내 그림 장면 목록">{e.project.scenes.map((s,i)=><button type="button" key={s.id} aria-pressed={s.id===e.scene.id} disabled={disabled} onClick={()=>e.switchScene(s.id)}><ScenePreview project={e.project} scene={s}/><span><small>{String(i+1).padStart(2,'0')}</small>{s.title}</span></button>)}<button type="button" className="story-add-scene" disabled={disabled||e.project.scenes.length>=6} onClick={()=>e.addScene()}><b>＋</b>장면 추가</button></div>
+ <details className="draw-scene-settings"><summary>장면 이름과 설명</summary><label>장면 이름<input maxLength={40} disabled={editingDisabled} value={e.scene.title} onChange={event=>e.editScene({title:event.target.value})}/></label><label>장면 설명<textarea maxLength={120} disabled={editingDisabled} placeholder="예: 숲에서 작은 친구를 만났어요." value={e.scene.caption} onChange={event=>e.editScene({caption:event.target.value})}/></label><div className="draw-pair"><button type="button" disabled={editingDisabled||e.project.scenes.length>=6} onClick={()=>e.addScene(true)}>장면 복사</button><button type="button" disabled={editingDisabled||e.project.scenes.length===1} onClick={e.deleteScene}>장면 지우기</button></div></details></section><DrawingControls e={e}/></div>
+ <footer className="draw-footer"><p className="story-ending">세상에 하나뿐인 내 그림, 움직이는 이야기가 돼요.</p><details><summary>작품 보관·불러오기</summary><div className="draw-file-actions"><button type="button" disabled={disabled} onClick={e.backup}>작품 파일 보관</button><button type="button" disabled={disabled} onClick={()=>file.current?.click()}>내 그림 작품 불러오기</button><button type="button" disabled={disabled} onClick={()=>void e.png()}>{e.busy?'처리 중':'현재 모습 PNG'}</button><button type="button" disabled={disabled} onClick={e.newWork}>새 작품</button></div><p>그림과 배경, 움직임, 다듬기 원본을 파일에 함께 보관해요. 현재 자동 저장은 이 기기에만 적용돼요. PNG는 정지 그림이에요.</p></details></footer><input type="file" ref={file} accept=".json,application/json" hidden aria-label="내 그림 작품 파일 선택" onChange={event=>{const picked=event.target.files?.[0];event.target.value='';if(picked)void e.importWork(picked);}}/>
+ </main>;
 }

@@ -1,0 +1,43 @@
+name: PLAY approved whole studio
+on:
+  push:
+    branches: [fix/play-approved-surface]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: play-story-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.16.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install isolated PLAY app
+        working-directory: apps/play-studio
+        run: pnpm install --ignore-workspace --no-frozen-lockfile
+      - name: Typecheck and production build
+        working-directory: apps/play-studio
+        run: pnpm typecheck && pnpm build
+      - name: Browser engines
+        working-directory: apps/play-studio
+        run: pnpm exec playwright install --with-deps chromium webkit
+      - name: Real studio and cutout browser checks
+        working-directory: apps/play-studio
+        run: node ../../scripts/play-story-surface-qa.mjs
+      - name: Keep screenshots and sample outputs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: story-surface-qa
+          path: |
+            apps/play-studio/qa-results/
+            apps/play-studio/public/play-scenes/
+          retention-days: 7
