@@ -5,6 +5,16 @@ import {loadDrawing,saveDrawing} from '@/lib/drawing-storage';
 import {loadDrawingImages} from '@/lib/drawing-media';
 import {drawDrawingScene,hitDrawing} from '@/lib/drawing-renderer';
 import {downloadBlob,fileName} from '@/lib/project-files';
+
+function safeItemPoint(item:DrawingItem,asset:DrawingAsset,pos:{x:number;y:number}){
+  const height=item.width*(1280/720)*(asset.height/asset.width);
+  const accentUp=item.motion==='hop'?7:item.motion==='bounce'?4:item.motion==='float'?2.5:0;
+  const accentDown=item.motion==='float'?2.5:0;
+  const side=bounded(item.width/2+1,2,49);
+  const top=bounded(height+accentUp+1,5,96-accentDown);
+  return {x:bounded(pos.x,side,100-side),y:bounded(pos.y,top,99-accentDown)};
+}
+
 export function useDrawingEditor(){
   const [project,setProject]=useState<DrawingProject>(emptyDrawingProject),projectRef=useRef(project);
   const [selectedId,setSelectedId]=useState<string>(),[playing,setPlaying]=useState(false),[reset,setReset]=useState(0),[destination,setDestination]=useState(false);
@@ -41,11 +51,11 @@ export function useDrawingEditor(){
   function point(e:ReactPointerEvent<HTMLCanvasElement>){const r=e.currentTarget.getBoundingClientRect();return {x:bounded((e.clientX-r.left)/r.width*100,0,100),y:bounded((e.clientY-r.top)/r.height*100,0,100)};}
   function down(e:ReactPointerEvent<HTMLCanvasElement>){
     if(!loaded||playing)return;const pos=point(e);
-    if(destination&&selected){patchItem({target:pos,motion:selected.motion==='still'?'move':selected.motion});setDestination(false);return;}
+    if(destination&&selected&&selectedAsset){const target=safeItemPoint(selected,selectedAsset,pos);patchItem({target,motion:selected.motion==='still'?'move':selected.motion});setDestination(false);return;}
     if(clock.current>0){stop();return;}
     const item=hitDrawing(project,scene,pos.x,pos.y);setSelectedId(item?.id);if(!item)return;e.preventDefault();e.currentTarget.setPointerCapture(e.pointerId);drag.current={id:item.id,pointerId:e.pointerId,dx:pos.x-item.x,dy:pos.y-item.y,start:projectRef.current,moved:false};
   }
-  function move(e:ReactPointerEvent<HTMLCanvasElement>){const d=drag.current;if(!d||d.pointerId!==e.pointerId)return;const pos=point(e);d.moved=true;const p=projectRef.current;setValue({...p,scenes:p.scenes.map(s=>s.id===p.activeSceneId?{...s,items:s.items.map(i=>i.id===d.id?{...i,x:bounded(pos.x-d.dx,2,98),y:bounded(pos.y-d.dy,5,98)}:i)}:s)});}
+  function move(e:ReactPointerEvent<HTMLCanvasElement>){const d=drag.current;if(!d||d.pointerId!==e.pointerId)return;const pos=point(e);d.moved=true;const p=projectRef.current;setValue({...p,scenes:p.scenes.map(s=>s.id===p.activeSceneId?{...s,items:s.items.map(i=>{if(i.id!==d.id)return i;const asset=p.assets.find(a=>a.id===i.assetId);const raw={x:pos.x-d.dx,y:pos.y-d.dy};const next=asset?safeItemPoint(i,asset,raw):{x:bounded(raw.x,2,98),y:bounded(raw.y,5,98)};return {...i,...next};})}:s)});}
   function up(e:ReactPointerEvent<HTMLCanvasElement>){const d=drag.current;if(!d||d.pointerId!==e.pointerId)return;drag.current=null;if(d.moved){past.current=[...past.current.slice(-29),d.start];future.current=[];setValue({...projectRef.current,updatedAt:new Date().toISOString()});}}
   function cancel(){if(drag.current){setValue(drag.current.start);drag.current=null;}}
   async function importWork(file:File){setBusy(true);try{if(file.size>DRAWING_FILE_LIMIT)throw new Error('작품 파일은 12MB 이하로 골라 주세요.');const next=parseDrawingFile(await file.text());await loadDrawingImages(next.assets);if(!confirm('불러온 작품으로 바꿀까요? 현재 작품은 먼저 파일로 보관해 주세요.'))return;setBlocked(false);commit(()=>next);setError('');setSelectedId(undefined);setDestination(false);}catch(cause){setError(cause instanceof Error?cause.message:'작품을 읽지 못했어요.');}finally{setBusy(false);}}
