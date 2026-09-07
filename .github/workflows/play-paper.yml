@@ -1,0 +1,43 @@
+name: PLAY shaded paper regression
+on:
+  push:
+    branches: [fix/play-shaded-paper]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: play-paper-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.16.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install PLAY
+        working-directory: apps/play-studio
+        run: pnpm install --ignore-workspace --no-frozen-lockfile
+      - name: Types and build
+        working-directory: apps/play-studio
+        run: pnpm typecheck && pnpm build
+      - name: Test browsers
+        working-directory: apps/play-studio
+        run: pnpm exec playwright install --with-deps chromium webkit
+      - name: One-click paper removal, original and save regression
+        working-directory: apps/play-studio
+        run: node ../../scripts/play-paper-qa.mjs
+      - name: Existing story surface regression
+        working-directory: apps/play-studio
+        run: node ../../scripts/play-story-surface-qa.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: paper-cleanup-qa
+          path: apps/play-studio/qa-results/
+          retention-days: 7
