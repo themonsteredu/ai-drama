@@ -4,7 +4,7 @@ import {fileURLToPath} from 'node:url';
 import {spawn} from 'node:child_process';
 import {mkdir,writeFile,readFile} from 'node:fs/promises';
 import path from 'node:path';
-import {wrapSpeech,speechTextLayout,renderDrawingSpeech,newSpeechView} from '../apps/play-studio/lib/drawing-speech.ts';
+import {speechTextLayout,renderDrawingSpeech,newSpeechView} from '../apps/play-studio/lib/drawing-speech.ts';
 const app=fileURLToPath(new URL('../apps/play-studio/',import.meta.url));
 const require=createRequire(path.join(app,'package.json')),{chromium,webkit}=require('playwright'),{PNG}=require('pngjs');
 const out=path.join(app,'qa-results');await mkdir(out,{recursive:true});
@@ -27,6 +27,7 @@ const reports=[];
 const longText='안녕! 나는 네가 직접 그린 공룡이야. 오늘은 숲에서 친구들을 만나고, 비가 오면 커다란 나무 아래에서 쉬고 싶어. 우리 함께 새로운 이야기를 만들어 볼까?\n\n'.repeat(40)+'마지막 문장도 사라지면 안 돼!';
 async function saved(page){await page.waitForTimeout(700);return page.evaluate(()=>new Promise((resolve,reject)=>{const r=indexedDB.open('moakit-play-drawings-v1',1);r.onerror=()=>reject(r.error);r.onsuccess=()=>{const db=r.result,q=db.transaction('projects').objectStore('projects').get('active');q.onsuccess=()=>{db.close();resolve(q.result);};q.onerror=()=>reject(q.error);};}));}
 async function inside(page){assert(await page.evaluate(()=>{const stage=document.querySelector('.draw-canvas').getBoundingClientRect();return [...document.querySelectorAll('.drawing-speech-box')].every(e=>{const r=e.getBoundingClientRect();return r.left>=stage.left-1&&r.top>=stage.top-1&&r.right<=stage.right+1&&r.bottom<=stage.bottom+1;});}),'speech stays in stage');assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'page has no horizontal overflow');}
+async function atPage(page,n){await page.waitForFunction(expected=>document.querySelector('.drawing-speech-box')?.getAttribute('data-page')===String(expected),n);assert.equal(await page.locator('.drawing-speech-box').getAttribute('data-page'),String(n));}
 try{
  let ready=false;for(let i=0;i<100;i++){try{if((await fetch(base)).ok){ready=true;break;}}catch{}await new Promise(r=>setTimeout(r,200));}assert(ready);
  for(const [name,engine] of [['chromium',chromium],['webkit',webkit]]){
@@ -37,15 +38,15 @@ try{
    await modal.getByLabel('그림 이름',{exact:true}).fill('공룡');await modal.getByRole('button',{name:'배경 지우기',exact:true}).click();await page.waitForFunction(()=>document.querySelector('.cutout-dialog')?.getAttribute('aria-busy')==='false',null,{timeout:55000});
    await modal.getByRole('button',{name:'다 됐어요!',exact:true}).click();await modal.getByRole('button',{name:'무대에 놓기',exact:true}).click();await modal.waitFor({state:'hidden'});
    const input=page.getByRole('textbox',{name:'이 그림의 대사',exact:true});assert.equal(await input.getAttribute('maxlength'),null);await input.fill('안녕!');await page.locator('.drawing-speech-box').waitFor();const small=await page.locator('.drawing-speech-box').boundingBox();
-   await input.fill(longText);assert.equal(await input.inputValue(),longText);await inside(page);assert(Number(await page.locator('.drawing-speech-box').getAttribute('data-pages'))>1);assert((await page.locator('.drawing-speech-box').boundingBox()).height>small.height);
-   await page.getByRole('button',{name:'공룡 다음 대사',exact:true}).click();assert.equal(await page.locator('.drawing-speech-box').getAttribute('data-page'),'2');await page.getByRole('button',{name:'공룡 이전 대사',exact:true}).click();assert.equal(await page.locator('.drawing-speech-box').getAttribute('data-page'),'1');
+   await input.fill(longText);assert.equal(await input.inputValue(),longText);await page.waitForFunction(()=>Number(document.querySelector('.drawing-speech-box')?.getAttribute('data-pages'))>1);await inside(page);assert((await page.locator('.drawing-speech-box').boundingBox()).height>small.height);
+   await page.getByRole('button',{name:'공룡 다음 대사',exact:true}).click();await atPage(page,2);await page.getByRole('button',{name:'공룡 이전 대사',exact:true}).click();await atPage(page,1);
    let doc=await saved(page);assert.equal(doc.scenes[0].items[0].speech,longText);
    let event=page.waitForEvent('download');await page.getByRole('button',{name:'작품 보관',exact:true}).click();let dl=await event;const backup=path.join(out,`speech-${name}.json`);await dl.saveAs(backup);const bytes=await readFile(backup);assert.equal(JSON.parse(bytes.toString()).scenes[0].items[0].speech,longText);
    await page.reload();await page.locator('.draw-title small').filter({hasText:'이 기기에 저장됨'}).waitFor();await page.getByRole('button',{name:'공룡',exact:true}).click();assert.equal(await input.inputValue(),longText);
    await input.fill('띄어쓰기없이길게적는대사'.repeat(600));await inside(page);assert((await saved(page)).scenes[0].items[0].speech.length>5000);
    await page.getByLabel('내 그림 작품 파일 선택',{exact:true}).setInputFiles({name:'restore.json',mimeType:'application/json',buffer:bytes});doc=await saved(page);assert.equal(doc.scenes[0].items[0].speech,longText,'long dialogue import is valid');
    await page.getByRole('button',{name:'공룡',exact:true}).click();await page.getByRole('button',{name:'이동',exact:true}).click();await page.getByRole('button',{name:'도착할 곳 고르기',exact:false}).click();const stage=await page.locator('.draw-canvas').boundingBox();await page.locator('.draw-canvas').click({position:{x:stage.width*.93,y:stage.height*.05}});
-   await page.getByRole('button',{name:'▶ 움직여 보기',exact:true}).click();await page.waitForTimeout(900);await inside(page);const t=Number(await page.locator('.draw-canvas').getAttribute('data-time'));await page.getByRole('button',{name:'공룡 다음 대사',exact:true}).click();assert(Number(await page.locator('.draw-canvas').getAttribute('data-time'))>=t,'turn page does not restart motion');await page.getByRole('button',{name:'■ 처음으로',exact:true}).click();
+   await page.getByRole('button',{name:'▶ 움직여 보기',exact:true}).click();await page.waitForTimeout(900);await inside(page);const t=Number(await page.locator('.draw-canvas').getAttribute('data-time'));await page.getByRole('button',{name:'공룡 다음 대사',exact:true}).click();await atPage(page,2);assert(Number(await page.locator('.draw-canvas').getAttribute('data-time'))>=t,'turn page does not restart motion');await page.getByRole('button',{name:'■ 처음으로',exact:true}).click();
    await page.getByRole('button',{name:'▶ 발표하기',exact:true}).click();await inside(page);await page.getByRole('button',{name:'공룡 다음 대사',exact:true}).click();await page.getByRole('button',{name:'편집으로 돌아가기',exact:true}).click();
    event=page.waitForEvent('download');await page.getByRole('button',{name:'PNG 저장',exact:true}).click();dl=await event;const png=path.join(out,`speech-${name}-export.png`);await dl.saveAs(png);assert.equal(PNG.sync.read(await readFile(png)).width,2560);
    for(const width of [1440,1024,390]){await page.setViewportSize({width,height:1100});if(width===390)await page.getByRole('button',{name:'무대',exact:true}).click();await page.waitForTimeout(250);await inside(page);await page.screenshot({path:path.join(out,`speech-${name}-${width}.png`),fullPage:true});}
