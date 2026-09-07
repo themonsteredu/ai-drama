@@ -50,11 +50,15 @@ export function emptyDrawingProject():DrawingProject{
 export function drawingFrame(item:DrawingItem,seconds:number){
   const duration=item.speed==='slow'?8:item.speed==='fast'?3:5;
   const t=Math.max(0,seconds),phase=t*(item.speed==='slow'?.65:item.speed==='fast'?1.5:1);
-  const progress=item.target&&item.motion!=='still'?Math.min(1,t/duration):0;
+  const traveling=!!item.target&&item.motion!=='still';
+  const progress=traveling?Math.min(1,t/duration):0;
   const x=item.x+((item.target?.x??item.x)-item.x)*progress;
   let y=item.y+((item.target?.y??item.y)-item.y)*progress,angle=item.rotation;
-  if(item.motion==='hop'||item.motion==='bounce')y-=Math.abs(Math.sin(phase*Math.PI*1.5))*(item.motion==='hop'?7:4);
-  if(item.motion==='float')y-=Math.sin(phase*1.6)*2.5;
-  if(item.motion==='sway')angle+=Math.sin(phase*2)*4;
+  // A destination is a finite action: motion accents run while travelling, then the drawing settles exactly at the target.
+  // Drawings without a destination keep their chosen idle motion looping.
+  const animateAccent=!traveling||progress<1;
+  if(animateAccent&&(item.motion==='hop'||item.motion==='bounce'))y-=Math.abs(Math.sin(phase*Math.PI*1.5))*(item.motion==='hop'?7:4);
+  if(animateAccent&&item.motion==='float')y-=Math.sin(phase*1.6)*2.5;
+  if(animateAccent&&item.motion==='sway')angle+=Math.sin(phase*2)*4;
   return {x,y,angle,phase,progress};
 }
