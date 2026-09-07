@@ -1,0 +1,41 @@
+name: PLAY paper-removal focused checks
+on:
+  push:
+    branches: [fix/play-paper-background]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: play-paper-core-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  paper-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.16.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install
+        working-directory: apps/play-studio
+        run: pnpm install --ignore-workspace --no-frozen-lockfile
+      - name: Typecheck and build
+        working-directory: apps/play-studio
+        run: pnpm typecheck && pnpm build
+      - name: Browsers
+        working-directory: apps/play-studio
+        run: pnpm exec playwright install --with-deps chromium webkit
+      - name: Grey paper, alpha, undo, storage and normal desktop/mobile entry
+        working-directory: apps/play-studio
+        run: node ../../scripts/play-paper-core-qa.mjs
+      - name: Results (does not supersede separate responsive failure)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: paper-core-qa
+          path: apps/play-studio/paper-core-results/
+          retention-days: 7
