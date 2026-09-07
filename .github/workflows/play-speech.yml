@@ -1,0 +1,37 @@
+name: PLAY unrestricted dialogue
+on:
+  push:
+    branches: [fix/play-dialogue-layout]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  speech:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.16.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install PLAY
+        working-directory: apps/play-studio
+        run: pnpm install --ignore-workspace --no-frozen-lockfile
+      - name: Typecheck and build
+        working-directory: apps/play-studio
+        run: pnpm typecheck && pnpm build
+      - name: Browsers
+        working-directory: apps/play-studio
+        run: pnpm exec playwright install --with-deps chromium webkit
+      - name: Long dialogue, pages, storage and viewport checks
+        working-directory: apps/play-studio
+        run: node ../../scripts/play-speech-qa.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: play-speech-qa
+          path: apps/play-studio/qa-results/speech-*
+          retention-days: 7

@@ -1,0 +1,10 @@
+.draw-canvas-wrap{position:relative;min-width:0;width:100%;line-height:0}
+.drawing-speech-layer{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.drawing-speech-box{position:absolute;pointer-events:none;box-sizing:border-box}
+.drawing-speech-readable{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:pre-wrap}
+.drawing-speech-pager{position:absolute;bottom:0;left:0;right:0;display:flex;justify-content:space-between;align-items:center;gap:4px;padding:0 6px;box-sizing:border-box;line-height:1.2;font:500 12px/1.2 'S-Core Dream',sans-serif;color:#425d78}
+.drawing-speech-pager span{min-width:0;overflow-wrap:anywhere;text-align:center;flex:1}
+.drawing-app .drawing-speech-pager button{pointer-events:auto;touch-action:manipulation;min-width:44px;width:44px;min-height:44px;height:44px;flex:0 0 44px;display:grid;place-items:center;border:0;background:transparent;color:#145ea8;padding:0;margin:0;font:500 28px/1 sans-serif;border-radius:12px;cursor:pointer}
+.drawing-app .drawing-speech-pager button:disabled{opacity:.3;cursor:default}
+.drawing-app .drawing-speech-pager button:focus-visible{outline:2px solid #1683ef;outline-offset:-4px;background:#e8f3ff}
+.drawing-app .draw-controls textarea[aria-label='이 그림의 대사']{width:100%;max-width:100%;min-height:100px;max-height:260px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;word-break:normal;resize:vertical;line-height:1.6;box-sizing:border-box}
