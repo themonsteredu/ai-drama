@@ -1,5 +1,6 @@
 import { rasterImage } from './drawing-media';
 import { validRasterSource } from './drawing-project';
+import { photographedPaperMask } from './drawing-paper';
 
 export type CropRect = { x: number; y: number; width: number; height: number };
 export type CutoutDocument = { version: 1; original: string; mask: string; width: number; height: number; crop: CropRect };
@@ -52,15 +53,17 @@ export function brushMask(mask: Uint8ClampedArray, width: number, height: number
     mask[index] = restore ? Math.max(mask[index], Math.round(coverage * 255)) : Math.min(mask[index], Math.round((1 - coverage) * 255));
   }
 }
-/** Fast local paper cleanup, deliberately not described as semantic AI removal. */
+/** Local paper cleanup includes photographed grey sheets, not only white RGB. */
 export function paperMask(pixels: ImageData, previous: Uint8ClampedArray, crop: CropRect) {
+  const photographed = photographedPaperMask(pixels, previous, crop);
+  if (photographed) return photographed;
   const {width: w, height: h, data} = pixels, next = new Uint8ClampedArray(previous);
   const r = safeCrop(crop, w, h), seen = new Uint8Array(w * h), queue = new Int32Array(w * h); let head = 0, tail = 0;
   function visit(x: number, y: number) {
     if (x < r.x || y < r.y || x >= r.x + r.width || y >= r.y + r.height) return;
     const p = y * w + x; if (seen[p]) return; seen[p] = 1;
     const k = p * 4, low = Math.min(data[k], data[k+1], data[k+2]), high = Math.max(data[k], data[k+1], data[k+2]);
-    if (data[k+3] < 16 || (low > 215 && high - low < 32)) { next[p] = 0; queue[tail++] = p; }
+    if (previous[p] < 16 || data[k+3] < 16 || (low > 215 && high - low < 32)) { next[p] = 0; queue[tail++] = p; }
   }
   for (let x = r.x; x < r.x+r.width; x++) { visit(x, r.y); visit(x, r.y+r.height-1); }
   for (let y = r.y; y < r.y+r.height; y++) { visit(r.x, y); visit(r.x+r.width-1, y); }
@@ -79,7 +82,7 @@ export function visibleCrop(pixels: ImageData, mask: Uint8ClampedArray, rect: Cr
 }
 export async function finishCutout(original: string, pixels: ImageData, mask: Uint8ClampedArray, rect: CropRect, trim: boolean): Promise<CutoutResult> {
   const crop = trim ? visibleCrop(pixels, mask, rect) : safeCrop(rect, pixels.width, pixels.height);
-  visibleCrop(pixels, mask, crop); // Never silently add an entirely erased drawing.
+  visibleCrop(pixels, mask, crop);
   const work = canvasOf(pixels.width, pixels.height); work.context.putImageData(maskedPixels(pixels, mask), 0, 0);
   let output = canvasOf(crop.width, crop.height).canvas;
   output.getContext('2d')!.drawImage(work.canvas, crop.x, crop.y, crop.width, crop.height, 0, 0, crop.width, crop.height);
@@ -95,8 +98,7 @@ export async function finishCutout(original: string, pixels: ImageData, mask: Ui
   return {source,width:output.width,height:output.height,edit:{version:1,original,mask:encodedMask,width:pixels.width,height:pixels.height,crop}};
 }
 
-// Pinned Apache-2.0 OpenCV runtime is fetched only after the explicit button press.
-// Only library code is downloaded: image pixels never leave the browser.
+// Only pinned library code is downloaded. Photo pixels stay in the browser.
 const workerProgram = `
 self.onmessage = async ({data}) => {
   const allocated=[];
@@ -143,7 +145,9 @@ export function automaticMask(pixels: ImageData, crop: CropRect, signal: AbortSi
       done();if(data.error){reject(new Error(data.error));return;}
       const mask=new Uint8ClampedArray(data.mask),next=new Uint8ClampedArray(pixels.width*pixels.height);
       for(let y=0;y<pixels.height;y++)for(let x=0;x<pixels.width;x++)next[y*pixels.width+x]=mask[Math.min(data.height-1,Math.floor(y/pixels.height*data.height))*data.width+Math.min(data.width-1,Math.floor(x/pixels.width*data.width))];
-      resolve(next);
+      // GrabCut may correctly select the whole paper sheet instead of its ink.
+      // Refine that sheet, including its grey shadows, without replacing RGB.
+      resolve(photographedPaperMask(pixels,next,crop) ?? next);
     };
     worker.postMessage({width:small.canvas.width,height:small.canvas.height,crop:{x:crop.x*ratio,y:crop.y*ratio,width:crop.width*ratio,height:crop.height*ratio},pixels:buffer.buffer},[buffer.buffer]);
   });

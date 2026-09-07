@@ -1,0 +1,44 @@
+name: PLAY photographed paper regression
+on:
+  push:
+    branches: [fix/play-paper-background]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: play-paper-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.16.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install isolated PLAY app
+        working-directory: apps/play-studio
+        run: pnpm install --ignore-workspace --no-frozen-lockfile
+      - name: Typecheck and production build
+        working-directory: apps/play-studio
+        run: pnpm typecheck && pnpm build
+      - name: Browser engines
+        working-directory: apps/play-studio
+        run: pnpm exec playwright install --with-deps chromium webkit
+      - name: Actual dinosaur paper and restoration checks
+        working-directory: apps/play-studio
+        run: node ../../scripts/play-paper-qa.mjs
+      - name: Existing guided cutout regression
+        working-directory: apps/play-studio
+        run: node ../../scripts/play-cutout-qa.mjs
+      - name: Keep real screenshots and output samples
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: paper-background-qa
+          path: apps/play-studio/qa-results/
+          retention-days: 7
