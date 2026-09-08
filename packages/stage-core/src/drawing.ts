@@ -12,14 +12,19 @@ export interface DrawingItem {
   target?: { x: number; y: number }; speech: string;
 }
 export interface DrawingScene {
+  /** undefined inherits project music; null explicitly silences this scene. */
+  music?: DrawingMusic | null;
   id: string; title: string; background: string; backgroundAssetId?: string;
   backgroundFit: 'cover' | 'contain'; weather: DrawingWeather;
   wind: 'left' | 'right'; strength: 'gentle' | 'strong'; caption: string; items: DrawingItem[];
 }
 export interface DrawingProject {
+  music?: DrawingMusic | null; musicAssets?: DrawingMusicAsset[];
   format: 'moakit-drawing'; version: 1; id: string; title: string;
   activeSceneId: string; assets: DrawingAsset[]; scenes: DrawingScene[]; updatedAt: string;
 }
+export interface DrawingMusic { trackId: string; volume: number; loop: boolean; }
+export interface DrawingMusicAsset { id: string; name: string; source: string; duration: number; }
 export const drawingKinds: {id:DrawingKind;label:string}[] = [
   {id:'person',label:'사람'},{id:'animal',label:'동물'},{id:'plant',label:'식물'},
   {id:'nature',label:'자연'},{id:'prop',label:'소품'},{id:'background',label:'배경'},

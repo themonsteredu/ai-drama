@@ -1,6 +1,7 @@
 import type {DrawingProject} from '../../../packages/stage-core/src/drawing';
+import {validateMusic} from './drawing-music';
 export * from '../../../packages/stage-core/src/drawing';
-export const DRAWING_FILE_LIMIT=12_000_000;
+export const DRAWING_FILE_LIMIT=20_000_000;
 const record=(v:unknown):v is Record<string,unknown>=>!!v&&typeof v==='object'&&!Array.isArray(v);
 const text=(v:unknown,max:number)=>typeof v==='string'&&v.length<=max;
 const num=(v:unknown,min:number,max:number)=>typeof v==='number'&&Number.isFinite(v)&&v>=min&&v<=max;
@@ -26,6 +27,7 @@ function validEdit(v:unknown):boolean{
   return num(c.x,0,w-1)&&num(c.y,0,h-1)&&num(c.width,1,w)&&num(c.height,1,h)&&['x','y','width','height'].every(k=>Number.isInteger(c[k]))&&(c.x as number)+(c.width as number)<=w&&(c.y as number)+(c.height as number)<=h;
 }
 export function validateDrawingProject(v:unknown):v is DrawingProject{
+  if(!record(v)||!validateMusic(v))return false;
   if(!record(v)||v.format!=='moakit-drawing'||v.version!==1||!text(v.id,150)||!text(v.title,80)||!text(v.updatedAt,80))return false;
   if(!Array.isArray(v.assets)||v.assets.length>12||!ids(v.assets))return false;
   let bytes=0;
@@ -46,7 +48,7 @@ export function validateDrawingProject(v:unknown):v is DrawingProject{
   });
 }
 export function parseDrawingFile(raw:string):DrawingProject{
-  if(new Blob([raw]).size>DRAWING_FILE_LIMIT)throw new Error('작품 파일은 12MB 이하로 골라 주세요.');
+  if(new Blob([raw]).size>DRAWING_FILE_LIMIT)throw new Error('작품 파일은 20MB 이하로 골라 주세요.');
   let v:unknown;try{v=JSON.parse(raw);}catch{throw new Error('작품 파일을 읽지 못했어요. 기존 작품은 그대로예요.');}
   if(!validateDrawingProject(v))throw new Error('내 그림 움직이기 작품 파일이 아니거나 손상됐어요. 기존 작품은 그대로예요.');return v;
 }
