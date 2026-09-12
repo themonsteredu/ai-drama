@@ -1,0 +1,23 @@
+.draw-voice{display:grid;gap:10px;margin:14px 0;padding:14px;border:2px solid #ffd9c2;border-radius:20px;background:linear-gradient(180deg,#fff7f1,#fffdfb)}
+.draw-voice-head{display:flex;align-items:flex-start;gap:10px}
+.draw-voice-head>span{font-size:26px;line-height:1}
+.draw-voice-head strong{display:block;font-size:17px;color:#7a3c14}
+.draw-voice-head small{display:block;margin-top:3px;font-size:12px;color:#8a6a56;word-break:keep-all}
+.draw-voice-button{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;min-height:60px;padding:12px 16px;border:2px solid #ff9a5c;border-radius:16px;background:white;color:#a8390d;font:inherit;font-size:19px;font-weight:800;cursor:pointer}
+.draw-voice-button>span{font-size:20px;color:#e0451f}
+.draw-voice-button:disabled{opacity:.5;cursor:default}
+.draw-voice-button.recording{border-color:#e0451f;background:#e0451f;color:white}
+.draw-voice-dot{display:inline-block;width:16px;height:16px;border-radius:999px;background:white;animation:draw-voice-pulse 1s infinite alternate}
+@keyframes draw-voice-pulse{from{opacity:.35;transform:scale(.8)}to{opacity:1;transform:scale(1)}}
+.draw-voice-timer{margin:0;text-align:center;font-size:16px;font-weight:800;color:#a8390d}
+.draw-voice-timer small{font-weight:500;color:#8a6a56}
+.draw-voice-saved{display:grid;gap:8px;padding:10px 12px;border-radius:14px;background:#fff0e4}
+.draw-voice-saved p{margin:0;font-size:14px;color:#7a3c14}
+.draw-voice-actions{display:flex;gap:8px}
+.draw-voice-actions button{flex:1;min-height:46px;padding:8px 10px;border:1px solid #f0c3a3;border-radius:12px;background:white;color:#7a3c14;font:inherit;font-size:15px;font-weight:700;cursor:pointer}
+.draw-voice-actions button:disabled{opacity:.5;cursor:default}
+.draw-voice-hint{margin:0;font-size:12px;color:#8a6a56}
+.draw-voice :focus-visible{outline:3px solid #d2551f;outline-offset:3px}
+@media(max-width:400px){.draw-voice{padding:11px;gap:8px}.draw-voice-button{min-height:54px;font-size:17px}}
+@media(prefers-reduced-motion:reduce){.draw-voice-dot{animation:none}}
+.story-presenting .draw-voice{display:none}
