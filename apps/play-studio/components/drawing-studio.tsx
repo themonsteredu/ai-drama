@@ -4,6 +4,8 @@ import {useDrawingEditor} from './use-drawing-editor';
 import {DrawingMusicDialog} from './drawing-music-dialog';
 import {DrawingMovieDialog} from './drawing-movie-dialog';
 import {DrawingVoicePanel} from './drawing-voice-panel';
+import {DrawingStoryKit} from './drawing-story-kit';
+import type {StoryCharacter} from '@/lib/story-kits';
 import {effectiveMusic} from '@/lib/drawing-music';
 import {DrawingCanvas} from './drawing-canvas';
 import {DrawingLibrary} from './drawing-library';
@@ -24,6 +26,7 @@ export function DrawingStudio(){
  const e=useDrawingEditor(),file=useRef<HTMLInputElement>(null),root=useRef<HTMLElement>(null);
  const [musicOpen,setMusicOpen]=useState(false),[movieOpen,setMovieOpen]=useState(false);
  const [presenting,setPresenting]=useState(false),[mobileTab,setMobileTab]=useState('stage');
+ const [hint,setHint]=useState<{name:string;kind:StoryCharacter['kind']}|null>(null);
  const disabled=!e.loaded||e.busy,editingDisabled=disabled||e.playing,index=e.project.scenes.findIndex(s=>s.id===e.scene.id);
  function fits(assets:DrawingAsset[]){if(assets.reduce((sum,a)=>sum+cutoutBytes(a),0)>10_000_000){e.setError('원본과 수정 정보를 합친 그림 용량이 커요. 더 작은 사진을 골라 주세요. 기존 그림은 그대로예요.');return false;}return true;}
  function place(asset:DrawingAsset,isNew=false){if(isNew&&!fits([...e.project.assets,asset]))return false;const ok=e.place(asset,isNew);if(ok)setMobileTab('stage');return ok;}
@@ -39,7 +42,7 @@ export function DrawingStudio(){
  {e.error?<div className="draw-alert" role="alert"><span>{e.error}</span><button type="button" aria-label="안내 닫기" onClick={()=>e.setError('')}>×</button></div>:null}
  <nav className="story-mobile-tabs" aria-label="작업 화면">{[['stage','무대'],['pictures','그림·배경'],['actions','움직임·효과']].map(([id,label])=><button type="button" key={id} aria-pressed={mobileTab===id} onClick={()=>setMobileTab(id)}>{label}</button>)}</nav>
  {presenting?<div className="story-presentation-bar"><strong>{e.project.title}</strong><span>{index+1} / {e.project.scenes.length}</span><button type="button" onClick={finishPresentation}>편집으로 돌아가기</button></div>:null}
- <div className="draw-workspace"><div className="story-library-column"><DrawingLibrary assets={e.project.assets} disabled={editingDisabled} onPlace={place} onUpdate={updateAsset} onError={e.setError}/><DrawingScenery e={e} onPlace={place}/></div>
+ <div className="draw-workspace"><div className="story-library-column"><DrawingStoryKit e={e} onCharacter={character=>{setHint({name:character.name,kind:character.kind});setMobileTab('pictures');root.current?.querySelector<HTMLInputElement>('input[aria-label="그림 파일 선택"]')?.click();}}/><DrawingLibrary assets={e.project.assets} disabled={editingDisabled} onPlace={place} onUpdate={updateAsset} onError={e.setError} hint={hint} onHintUsed={()=>setHint(null)}/><DrawingScenery e={e} onPlace={place}/></div>
  <section className="draw-stage-column" aria-label="그림 무대 편집"><div className="draw-stage-heading"><div><small>MY LITTLE STORY</small><h1>{e.scene.title}</h1></div><span>{index+1} / {e.project.scenes.length} 장면</span></div>
  <div className={`draw-stage-frame ${e.destination?'choosing-destination':''}`}><DrawingCanvas project={e.project} scene={e.scene} playing={e.playing} reset={e.reset} selectedId={presenting?undefined:e.selectedId} clock={e.clock} onError={e.setError} onDown={presenting?()=>{}:e.down} onMove={presenting?()=>{}:e.move} onUp={presenting?()=>{}:e.up} onCancel={presenting?()=>{}:e.cancel}/>{!hasWork?<div className="draw-stage-empty"><img src="/play-scenes/dinosaur-photo.webp" alt="공룡 예시 사진"/><div><small>내 그림으로 시작하는 작은 모험</small><strong>어떤 친구를 만나 볼까요?</strong><p>그림을 올리고 배경을 꾸며 보세요.</p><button type="button" className="story-start-button" disabled={disabled} onClick={()=>{setMobileTab('pictures');root.current?.querySelector<HTMLInputElement>('input[aria-label="그림 파일 선택"]')?.click();}}>＋ 내 그림 올리기</button></div></div>:null}</div>
  <p className={`draw-stage-hint ${e.destination?'active':''}`} aria-live="polite">{e.destination?'도착할 곳을 무대에서 톡 눌러 주세요.':e.storyPlaying?'처음부터 쭉 보는 중이에요. 장면이 저절로 넘어가요.':e.playing?'움직이는 중이에요. 잠깐 멈추거나 처음으로 돌아갈 수 있어요.':'그림을 톡 눌러 선택하고, 손가락으로 옮겨요.'}</p>

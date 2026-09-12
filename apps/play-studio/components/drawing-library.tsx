@@ -1,17 +1,18 @@
 'use client';
 import {useEffect,useRef,useState,type ChangeEvent} from 'react';
-import {drawingId,drawingKinds,type DrawingAsset} from '@/lib/drawing-project';
+import {drawingId,drawingKinds,type DrawingAsset,type DrawingKind} from '@/lib/drawing-project';
 import {readDrawingImage} from '@/lib/drawing-media';
 import {DrawingCutoutEditor} from './drawing-cutout-editor';
 type Pending={asset:DrawingAsset;existing:boolean;revision:number};
-type Props={assets:DrawingAsset[];disabled:boolean;onPlace:(asset:DrawingAsset,isNew?:boolean)=>boolean;onUpdate:(asset:DrawingAsset)=>boolean;onError:(text:string)=>void};
-export function DrawingLibrary({assets,disabled,onPlace,onUpdate,onError}:Props){
+type NameHint={name:string;kind:DrawingKind};
+type Props={assets:DrawingAsset[];disabled:boolean;onPlace:(asset:DrawingAsset,isNew?:boolean)=>boolean;onUpdate:(asset:DrawingAsset)=>boolean;onError:(text:string)=>void;hint?:NameHint|null;onHintUsed?:()=>void};
+export function DrawingLibrary({assets,disabled,onPlace,onUpdate,onError,hint,onHintUsed}:Props){
   const picker=useRef<HTMLInputElement>(null),camera=useRef<HTMLInputElement>(null),sequence=useRef(0);
   const [pending,setPending]=useState<Pending|null>(null),[busy,setBusy]=useState(false);
   useEffect(()=>()=>{sequence.current++;},[]);
   async function open(file:File){
     const job=++sequence.current;setBusy(true);
-    try{const image=await readDrawingImage(file);if(job!==sequence.current)return;setPending({asset:{...image,id:drawingId('asset'),name:file.name.replace(/\.[^.]+$/,'').slice(0,40)||'내 그림',kind:'animal'},existing:false,revision:job});}
+    try{const image=await readDrawingImage(file);if(job!==sequence.current)return;const named=hint?.name||file.name.replace(/\.[^.]+$/,'').slice(0,40)||'내 그림';setPending({asset:{...image,id:drawingId('asset'),name:named,kind:hint?.kind||'animal'},existing:false,revision:job});onHintUsed?.();}
     catch(cause){if(job===sequence.current)onError(cause instanceof Error?cause.message:'그림을 읽지 못했어요.');}
     finally{if(job===sequence.current)setBusy(false);}
   }
@@ -24,6 +25,7 @@ export function DrawingLibrary({assets,disabled,onPlace,onUpdate,onError}:Props)
   return <aside className="draw-library" id="my-drawings"><div className="draw-section-title"><small>MY DRAWING</small><h2><span className="story-section-number pink">1</span> 내 그림을 올려요</h2></div>
     <input type="file" ref={picker} accept="image/png,image/jpeg,image/webp" aria-label="그림 파일 선택" hidden onChange={event=>void pick(event)}/><input type="file" ref={camera} accept="image/*" capture="environment" aria-label="그림 사진 촬영" hidden onChange={event=>void pick(event)}/>
     <div className="draw-upload-actions"><button type="button" className="story-upload pink" disabled={disabled||busy||assets.length>=12} onClick={()=>camera.current?.click()}><span aria-hidden="true">▣</span>사진 찍기</button><button type="button" className="story-upload blue" disabled={disabled||busy||assets.length>=12} onClick={()=>picker.current?.click()}><span aria-hidden="true">＋</span>{busy?'사진 여는 중':'그림 고르기'}</button></div>
+    {hint?<p className="draw-hint-name" role="status">다음에 올리는 그림은 <b>{hint.name}</b>이 돼요.</p>:null}
     <p className="draw-help">종이 그림도, 태블릿 그림도 좋아요.<br/>JPG · PNG · WebP / 10MB 이하</p>
     <button type="button" className="story-sample" disabled={disabled||busy||assets.length>=12} onClick={()=>void sample()}><img src="/play-scenes/dinosaur-photo.webp" alt="공룡 예시 사진"/><span><strong>공룡 사진으로 연습하기</strong><small>내 그림이 없어도 먼저 해 봐요 →</small></span></button>
     {pending?<DrawingCutoutEditor key={pending.revision} source={pending.asset.source} initialName={pending.asset.name} initialKind={pending.asset.kind} edit={pending.asset.edit} existing={pending.existing} onCancel={()=>setPending(null)} onDone={(result,name,kind)=>{if(disabled)return false;const asset:DrawingAsset={...pending.asset,...result,name,kind};const ok=pending.existing?onUpdate(asset):onPlace(asset,true);if(ok)setPending(null);return ok;}}/>:null}
