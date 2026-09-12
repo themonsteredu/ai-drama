@@ -13,7 +13,7 @@ All six presets (신나는, 잔잔한, 모험, 긴장, 귀여운, 슬픈) are or
 - Upload: at most 3,000,000 bytes and 120 seconds per file; supported extensions MP3/WAV/M4A/AAC/OGG/WebM/FLAC, subject to actual browser codec support. Metadata loading rejects unreadable/unsupported media and times out after 10 seconds. No transcoding or uploading to a server occurs.
 - At most six referenced upload assets and 8,000,000 base64 characters (about 6MB binary) per project. Applying music prunes unreferenced audio. Repeated apply-to-all does not copy audio per scene. Undo history retains existing immutable asset strings, not serialized audio copies.
 - IndexedDB auto-save and the JSON project backup both include uploads. Total imported project file limit is 20MB (previously 12MB), alongside the unchanged 10MB raster budget. Restore validates references, settings, MIME/data URL format and per-asset/aggregate limits. Corrupt projects do not replace existing work.
-- Device storage remains subject to browser quota/eviction; the existing save-failure notice directs users to export a project file. Wait for ‘이 기기에 저장됨’ before closing. PNG remains a silent still image; audio/video export is not provided.
+- Device storage remains subject to browser quota/eviction; the existing save-failure notice directs users to export a project file. Wait for ‘이 기기에 저장됨’ before closing. PNG remains a silent still image; recorded voices and movie export are covered in `play-voice-movie.md`.
 
 ## Playback
 
