@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><title>문학이 무대가 되는 순간 홍보영상</title>
+<style>
+/* 앱 색상: 남색 패널 #101828, 파랑 --wine #2251cc, 금색 --gold #f4a522 */
+:root{--bg:#070d1c;--ink:#eef2fb;--mute:#93a0bd;--gold:#f4a522;--gold2:#ffc862;--blue:#2251cc;--sky:#8fb0ff}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:1920px;height:1080px;overflow:hidden;background:var(--bg);color:var(--ink);font-family:"Pretendard",sans-serif;letter-spacing:-0.02em}
+.stage{position:absolute;inset:0;overflow:hidden;background:radial-gradient(1200px 700px at 82% 18%,#16244a 0%,transparent 60%),radial-gradient(900px 600px at 8% 92%,#1a1830 0%,transparent 60%),var(--bg)}
+.grid{position:absolute;inset:-100px;background-image:linear-gradient(rgba(143,176,255,.055) 1px,transparent 1px),linear-gradient(90deg,rgba(143,176,255,.055) 1px,transparent 1px);background-size:80px 80px}
+.scene{position:absolute;inset:0;opacity:0}
+.a{will-change:transform,opacity}
+/* hero */
+.hero .bgimg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.hero .shade{position:absolute;inset:0;background:linear-gradient(90deg,rgba(7,13,28,.94) 0%,rgba(7,13,28,.6) 46%,rgba(7,13,28,.12) 100%),linear-gradient(0deg,rgba(7,13,28,.88),transparent 42%)}
+.hero .txt{position:absolute;left:140px;top:290px;width:1100px}
+.hero img.ch{position:absolute;bottom:0;height:760px;width:auto;filter:drop-shadow(0 30px 40px rgba(0,0,0,.55))}
+.eyebrow{font-size:30px;font-weight:600;color:var(--gold);letter-spacing:.04em;margin-bottom:28px;display:flex;align-items:center;gap:16px}
+.eyebrow::before{content:"";width:44px;height:3px;background:var(--gold);display:block}
+.big{font-size:104px;font-weight:800;line-height:1.12;letter-spacing:-0.04em}
+.big em{font-style:normal;color:var(--gold)}
+.sub{font-size:38px;font-weight:500;color:#d4dcee;margin-top:34px;line-height:1.45}
+/* window scenes */
+.cap{position:absolute;left:110px;top:0;bottom:0;width:560px;display:flex;flex-direction:column;justify-content:center}
+.cap .num{font-size:26px;font-weight:700;color:var(--gold);letter-spacing:.08em;margin-bottom:22px}
+.cap h2{font-size:66px;font-weight:800;line-height:1.18;letter-spacing:-0.04em}
+.cap h2 em{font-style:normal;color:var(--gold)}
+.cap p{font-size:31px;font-weight:500;color:#bfc9df;line-height:1.5;margin-top:30px}
+.chips{display:flex;flex-wrap:wrap;gap:12px;margin-top:34px}
+.chip{font-size:24px;font-weight:600;padding:10px 20px;border-radius:999px;border:1.5px solid rgba(244,165,34,.5);color:var(--gold2);background:rgba(244,165,34,.08)}
+.win{position:absolute;left:720px;top:176px;width:1110px;border-radius:22px;overflow:hidden;background:#0c1428;border:1.5px solid rgba(143,176,255,.25);box-shadow:0 40px 120px rgba(0,0,0,.55),0 0 0 1px rgba(0,0,0,.4)}
+.win .bar{height:52px;display:flex;align-items:center;gap:10px;padding:0 22px;background:#111b33;border-bottom:1px solid rgba(143,176,255,.14)}
+.win .bar i{width:14px;height:14px;border-radius:50%;background:#34405e;display:block}
+.win .bar span{margin-left:22px;flex:1;height:32px;border-radius:9px;background:#0a1122;color:#93a0bd;font-size:19px;display:flex;align-items:center;padding:0 18px;font-weight:500}
+.win .view{position:relative;width:1110px;height:624px;overflow:hidden;background:#f4f6f8}
+.win .view img{position:absolute;left:0;top:0;transform-origin:0 0}
+.wide .win{left:320px;top:170px;width:1280px}
+.wide .win .view{width:1280px;height:720px}
+.wide .cap{left:320px;top:52px;bottom:auto;width:1000px;flex-direction:row;align-items:baseline;gap:28px;justify-content:flex-start}
+.wide .cap h2{font-size:58px}
+.wide .cap .num{margin:0}
+.tag{position:absolute;padding:14px 24px;border-radius:14px;background:rgba(7,13,28,.92);border:1.5px solid var(--gold);font-size:27px;font-weight:700;color:var(--gold2);box-shadow:0 18px 50px rgba(0,0,0,.5);white-space:nowrap}
+/* works grid */
+.works .head{position:absolute;left:0;right:0;top:96px;text-align:center}
+.works .head h2{font-size:76px;font-weight:800;letter-spacing:-0.04em}
+.works .head h2 em{font-style:normal;color:var(--gold)}
+.works .head p{font-size:32px;color:#bfc9df;margin-top:16px;font-weight:500}
+.wgrid{position:absolute;left:150px;right:150px;top:330px;display:grid;grid-template-columns:repeat(6,1fr);gap:22px}
+.card{height:500px;border-radius:24px;overflow:hidden;position:relative;background:linear-gradient(170deg,#18233f,#0c1428);border:1.5px solid rgba(143,176,255,.2)}
+.card img{position:absolute;left:50%;bottom:150px;height:320px;transform:translateX(-50%);filter:drop-shadow(0 16px 20px rgba(0,0,0,.45))}
+.card .lab{position:absolute;left:0;right:0;bottom:0;padding:22px 22px 26px;background:linear-gradient(0deg,rgba(7,13,28,.96) 60%,rgba(7,13,28,0))}
+.card .lab i{display:block;width:40px;height:5px;border-radius:3px;margin-bottom:14px}
+.card .lab strong{display:block;font-size:40px;font-weight:800;letter-spacing:-0.03em}
+.card .lab span{display:block;font-size:21px;font-weight:600;color:#c9d2e6;margin-top:8px;line-height:1.35;height:57px}
+/* outro */
+.outro{display:flex;align-items:center;justify-content:center;flex-direction:column;text-align:center;padding-bottom:90px}
+.logo{display:flex;align-items:center;gap:30px}
+.logo .mark{width:120px;height:120px;border-radius:30px;background:#111827;border:2px solid rgba(255,255,255,.14);display:grid;place-items:center;box-shadow:0 20px 60px rgba(0,0,0,.45)}
+.logo .name{font-size:96px;font-weight:900;letter-spacing:-0.04em;text-align:left}
+.logo .name small{display:block;font-size:26px;letter-spacing:.3em;color:var(--gold);font-weight:600;margin-top:8px}
+.outro .line{font-size:50px;font-weight:700;margin-top:70px;letter-spacing:-0.03em}
+.outro .line em{font-style:normal;color:var(--gold)}
+.pill{margin-top:56px;font-size:36px;font-weight:700;padding:22px 46px;border-radius:999px;background:var(--gold);color:#1b1203;letter-spacing:-0.01em}
+.outro .foot{margin-top:40px;font-size:26px;color:var(--mute);font-weight:500}
+.subs{position:absolute;left:0;right:0;bottom:44px;display:flex;justify-content:center;pointer-events:none}
+.subs span{font-size:40px;font-weight:600;line-height:1.35;color:#fff;background:rgba(4,8,18,.8);padding:14px 34px;border-radius:16px;text-align:center;max-width:1560px;box-shadow:0 10px 40px rgba(0,0,0,.35);letter-spacing:-0.02em}
+.progress{position:absolute;left:0;bottom:0;height:6px;background:var(--gold);opacity:.85}
+</style></head>
+<body>
+<div class="stage" id="stage">
+  <div class="grid a" id="grid"></div>
+
+  <section class="scene hero" id="s-hero">
+    <img class="bgimg a" id="hero-img" src="img/hero-bg.webp">
+    <div class="shade"></div>
+    <img class="ch a" id="hero-c1" src="img/chunhyang.webp">
+    <img class="ch a" id="hero-c2" src="img/chunhyang-3.webp">
+    <div class="txt">
+      <div class="eyebrow a" data-in="0.3">국어 수업 · 고전문학 영상연극 제작</div>
+      <div class="big a" data-in="0.7">오늘, 우리 반이<br><em>영화 제작진</em>이 됩니다</div>
+      <div class="sub a" data-in="1.6">고전 한 장면을 직접 각색하고, 연기하고, 촬영해요</div>
+    </div>
+  </section>
+
+  <section class="scene" id="s-work">
+    <div class="cap">
+      <div class="num a" data-in="0.2">STEP 1 · 작품 선택</div>
+      <h2 class="a" data-in="0.4">가장 극적인<br><em>한 장면</em>을 골라요</h2>
+      <p class="a" data-in="0.8">인원 수만큼 등장인물과 촬영 컷이 자동으로 준비돼요.</p>
+      <div class="chips a" data-in="1.2"><span class="chip">6개 고전</span><span class="chip">4 · 5 · 6인용</span><span class="chip">인원 = 배역 = 컷</span></div>
+    </div>
+    <div class="win a" data-win><div class="bar"><i></i><i></i><i></i><span>문학이 무대가 되는 순간 · 작품선택</span></div><div class="view"><img id="v-work"></div></div>
+  </section>
+
+  <section class="scene" id="s-roles">
+    <div class="cap">
+      <div class="num a" data-in="0.2">STEP 2 · 역할 배정</div>
+      <h2 class="a" data-in="0.4">전원 배우,<br><em>전원 제작자</em></h2>
+      <p class="a" data-in="0.8">한 사람마다 겹치지 않는 배역 하나와 제작 역할 하나.</p>
+      <div class="chips a" data-in="1.2"><span class="chip">연출</span><span class="chip">각색</span><span class="chip">촬영관리</span><span class="chip">편집관리</span><span class="chip">소품·무대</span></div>
+    </div>
+    <div class="win a" data-win><div class="bar"><i></i><i></i><i></i><span>문학이 무대가 되는 순간 · 역할배정</span></div><div class="view"><img id="v-roles"></div></div>
+  </section>
+
+  <section class="scene" id="s-script">
+    <div class="cap">
+      <div class="num a" data-in="0.2">STEP 3 · 시나리오</div>
+      <h2 class="a" data-in="0.4">컷마다<br><em>우리 말로</em><br>대사를 써요</h2>
+      <p class="a" data-in="0.8">먼저 모둠이 직접 창작하고, 막힐 때만 교사용 모범대사를 열어 봐요.</p>
+    </div>
+    <div class="win a" data-win><div class="bar"><i></i><i></i><i></i><span>문학이 무대가 되는 순간 · 시나리오</span></div><div class="view"><img id="v-script"></div></div>
+  </section>
+
+  <section class="scene wide" id="s-stage">
+    <div class="cap"><div class="num a" data-in="0.1">STEP 4 · 무대 꾸미기</div><h2 class="a" data-in="0.3">촬영 전에, <em>장면을 먼저</em> 세워 봐요</h2></div>
+    <div class="win a" data-win><div class="bar"><i></i><i></i><i></i><span>문학이 무대가 되는 순간 · 무대꾸미기</span></div><div class="view"><img id="v-stage"></div></div>
+    <div class="tag a" id="tag-stage" style="left:1330px;top:66px">실시간 공동 편집 · 배경 · 인물 · 자세</div>
+  </section>
+
+  <section class="scene" id="s-rec">
+    <div class="cap">
+      <div class="num a" data-in="0.2">STEP 5 · 컷별 촬영</div>
+      <h2 class="a" data-in="0.4">한 컷씩 찍고,<br><em>화자를</em><br>표시해요</h2>
+      <p class="a" data-in="0.8">태블릿·노트북 카메라로 바로 촬영. 마음에 안 들면 다시 찍고, 좋으면 확정!</p>
+      <div class="chips a" data-in="1.2"><span class="chip">다시 찍기</span><span class="chip">미리보기</span><span class="chip">후시녹음</span></div>
+    </div>
+    <div class="win a" data-win><div class="bar"><i></i><i></i><i></i><span>문학이 무대가 되는 순간 · 촬영</span></div><div class="view"><img id="v-rec"></div></div>
+  </section>
+
+  <section class="scene" id="s-finish">
+    <div class="cap">
+      <div class="num a" data-in="0.2">STEP 6 · 자동 완성</div>
+      <h2 class="a" data-in="0.4">편집은 시스템에게,<br><em>무대는</em> 우리에게</h2>
+      <p class="a" data-in="0.8">오프닝 → 등장인물 소개 → 컷 → 배경음악 → 엔딩 크레딧까지 한 편의 MP4로.</p>
+      <div class="chips a" data-in="1.2"><span class="chip">BGM 블라인드 투표</span><span class="chip">1280×720 MP4</span></div>
+    </div>
+    <div class="win a" data-win><div class="bar"><i></i><i></i><i></i><span>문학이 무대가 되는 순간 · 작품완성</span></div><div class="view"><img id="v-finish"></div></div>
+  </section>
+
+  <section class="scene works" id="s-works">
+    <div class="head"><h2 class="a" data-in="0.1">고전 <em>6작품</em>, 가장 극적인 장면</h2><p class="a" data-in="0.4">작품마다 4 · 5 · 6인용 배역과 컷 템플릿이 준비돼 있어요.</p></div>
+    <div class="wgrid">
+      <div class="card a" data-in="0.6"><img src="img/heungbu.webp"><div class="lab"><i style="background:#c7774f"></i><strong>흥부전</strong><span>닫힌 대문 앞,<br>형제의 갈등</span></div></div>
+      <div class="card a" data-in="0.75"><img src="img/chunhyang.webp"><div class="lab"><i style="background:#d8506b"></i><strong>춘향전</strong><span>암행어사<br>출두요!</span></div></div>
+      <div class="card a" data-in="0.9"><img src="img/honggildong.webp"><div class="lab"><i style="background:#3a9aa4"></i><strong>홍길동전</strong><span>아버지를 아버지라<br>부르지 못하고</span></div></div>
+      <div class="card a" data-in="1.05"><img src="img/simcheong.webp"><div class="lab"><i style="background:#5d8ad0"></i><strong>심청전</strong><span>아버지, 눈을 떠<br>저를 보세요</span></div></div>
+      <div class="card a" data-in="1.2"><img src="img/byeoljubu.webp"><div class="lab"><i style="background:#3fa0b0"></i><strong>별주부전</strong><span>제 간은 육지에<br>두고 왔습니다</span></div></div>
+      <div class="card a" data-in="1.35"><img src="img/jeonwoochi.webp"><div class="lab"><i style="background:#8b6bd0"></i><strong>전우치전</strong><span>탐관오리의 창고가<br>열린 날</span></div></div>
+    </div>
+  </section>
+
+  <section class="scene" id="s-teacher">
+    <div class="cap">
+      <div class="num a" data-in="0.2">선생님 운영실</div>
+      <h2 class="a" data-in="0.4">모둠 진행을<br><em>한눈에</em></h2>
+      <p class="a" data-in="0.8">모둠 코드 생성, 단계별 진행 현황, 인쇄용 활동지, 제출 작품 연속 상영까지.</p>
+      <div class="chips a" data-in="1.2"><span class="chip">모둠 코드</span><span class="chip">활동지 인쇄</span><span class="chip">작품 상영회</span></div>
+    </div>
+    <div class="win a" data-win><div class="bar"><i></i><i></i><i></i><span id="bar-teacher">문학이 무대가 되는 순간 · 교사 운영실</span></div><div class="view"><img id="v-teacher"></div></div>
+  </section>
+
+  <section class="scene outro" id="s-outro">
+    <div class="logo a" data-in="0.1"><div class="mark"><svg width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.2 6 3 11l-.9-2.4c-.3-1.1.3-2.2 1.3-2.5l13.5-4c1.1-.3 2.2.3 2.5 1.3Z"/><path d="m6.2 5.3 3.1 3.9"/><path d="m12.4 3.4 3.1 4"/><path d="M3 11h18v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg></div><div class="name">문학이 무대가 되는 순간<small>LITERATURE PRODUCTION STUDIO</small></div></div>
+    <div class="line a" data-in="0.6">읽고, 해석하고, <em>무대 위에서 다시 만든다</em></div>
+    <div class="pill a" data-in="1.1">설치 없이 브라우저에서 바로 · 모둠 코드로 입장</div>
+    <div class="foot a" data-in="1.5">AI가 대신 만들지 않아요 · 학생의 해석과 연기를 한 편으로 잇는 교실 영상연극 제작소</div>
+  </section>
+  <div class="subs"><span id="sub"></span></div>
+  <div class="progress" id="prog"></div>
+</div>
+<script>
+const FPS = 30;
+const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
+const ease = t => t < .5 ? 4*t*t*t : 1 - Math.pow(-2*t + 2, 3)/2;
+const eout = t => 1 - Math.pow(1 - t, 3);
+const lerp = (a, b, t) => a + (b - a) * t;
+// 클립: 프레임 수, 프레임 가로 픽셀
+const CLIPS = {
+  work_hd:{n:233,w:2400}, roles:{n:211,w:1600}, script_hd:{n:260,w:2400}, stage_hd:{n:412,w:2400},
+  rec:{n:262,w:1600}, finish:{n:166,w:1600}, teacher:{n:233,w:1600}, sheet:{n:142,w:1600},
+};
+// view = 1600x900 화면 좌표의 [x,y,가로] (세로 = 가로*9/16), 처음 -> 끝으로 천천히 확대
+const SCENES = [
+  { id:'s-hero', dur:5.4 },
+  { id:'s-work', dur:5.2, img:'v-work', segs:[
+      { clip:'work_hd', from:0.3, rate:1.1, len:5.2, view:[[0,0,1600],[150,110,1250]] } ] },
+  { id:'s-roles', dur:5.2, img:'v-roles', segs:[
+      { clip:'roles', from:1.5, rate:1, len:5.2, view:[[0,20,1600],[150,120,1300]] } ] },
+  { id:'s-script', dur:6.0, img:'v-script', segs:[
+      { clip:'script_hd', from:0.7, rate:1.25, len:6.0, view:[[0,0,1600],[220,200,1080]] } ] },
+  { id:'s-stage', dur:8.2, img:'v-stage', segs:[
+      { clip:'stage_hd', from:0.3, rate:1.6, len:8.2, view:[[0,0,1600],[400,100,1060]] } ] },
+  { id:'s-rec', dur:5.6, img:'v-rec', segs:[
+      { clip:'rec', from:0.6, rate:1.3, len:5.6, view:[[150,110,1300],[700,120,860]] } ] },
+  { id:'s-finish', dur:5.6, img:'v-finish', segs:[
+      { clip:'finish', from:0.2, rate:0.9, len:5.6, view:[[100,60,1400],[150,60,1300]] } ] },
+  { id:'s-works', dur:5.8 },
+  { id:'s-teacher', dur:6.4, img:'v-teacher', segs:[
+      { clip:'teacher', from:2.0, rate:1, len:3.5, view:[[80,20,1440],[140,60,1320]] },
+      { clip:'sheet', from:0.3, rate:0.12, len:2.9, view:[[300,60,1000],[360,90,880]] } ] },
+  { id:'s-outro', dur:6.0 },
+];
+const XF = 0.6; // 장면 전환(크로스페이드)
+let acc = 0; for (const s of SCENES) { s.start = acc; acc += s.dur - XF; }
+const TOTAL = acc + XF;
+window.TOTAL = TOTAL;
+function src(clip, i) { const c = CLIPS[clip]; i = Math.max(1, Math.min(c.n, i)); return `frames/${clip}/${String(i).padStart(5,'0')}.jpg`; }
+async function setImg(el, url) {
+  if (el.dataset.src === url) return;
+  el.dataset.src = url; el.src = url;
+  try { await el.decode(); } catch {}
+}
+const SUBS = [
+  [0.5,4.5,'고전문학, 읽기만 하고 끝내기엔 아깝지 않나요?'],
+  [5.0,9.2,'모둠이 함께 여섯 작품 중 가장 극적인 한 장면을 고릅니다.'],
+  [9.6,13.6,'모두가 배역 하나, 제작 역할 하나씩. 전원이 배우이자 제작자예요.'],
+  [14.0,18.8,'컷마다 우리 말로 대사를 쓰고, 막히면 모범대사를 참고해요.'],
+  [19.3,22.9,'촬영 전에는 실제 배경과 인물 그림으로 무대를 꾸미고,'],
+  [23.0,26.6,'배우 위치와 크기, 자세까지 친구들과 함께 맞춰요.'],
+  [27.1,31.6,'이제 한 컷씩 촬영! 다시 찍고, 확정하고, 화자 이름표까지.'],
+  [32.1,36.6,'편집은 시스템이 맡아요. 오프닝부터 크레딧까지 한 편의 영상으로!'],
+  [37.1,41.8,'흥부전부터 전우치전까지, 4·5·6인용 장면이 준비돼 있어요.'],
+  [42.3,47.6,'선생님은 모둠 진행을 한눈에 보고, 활동지 인쇄와 작품 상영회까지.'],
+  [48.1,53.4,'읽고, 해석하고, 무대 위에서 다시 만든다. 문학이 무대가 되는 순간.'],
+];
+window.SUBS = SUBS;
+window.render = async function (t) {
+  { const cur = SUBS.find(x => t >= x[0] && t <= x[1]); const el = document.getElementById('sub');
+    if (cur) { el.textContent = cur[2]; const o = Math.min(clamp((t-cur[0])/0.25), clamp((cur[1]-t)/0.25)); el.parentElement.style.opacity = o; el.style.visibility='visible'; }
+    else { el.style.visibility='hidden'; } }
+  document.getElementById('prog').style.width = (t / TOTAL * 100) + '%';
+  document.getElementById('grid').style.transform = `translate(${-(t*6)%80}px, ${-(t*3)%80}px)`;
+  const waits = [];
+  for (const s of SCENES) {
+    const el = document.getElementById(s.id);
+    const lt = t - s.start;
+    if (lt < -0.01 || lt > s.dur + 0.01) { el.style.opacity = 0; el.style.display = 'none'; continue; }
+    el.style.display = '';
+    const fin = s === SCENES[0] ? 1 : clamp(lt / XF), fout = s === SCENES.at(-1) ? clamp((s.dur - lt) / 0.8) : clamp((s.dur - lt) / XF);
+    el.style.opacity = Math.min(fin, fout);
+    el.querySelectorAll('[data-in]').forEach(a => {
+      const p = eout(clamp((lt - parseFloat(a.dataset.in)) / 0.7));
+      a.style.opacity = p; a.style.transform = `translateY(${(1 - p) * 34}px)`;
+    });
+    const win = el.querySelector('[data-win]');
+    if (win) { const p = eout(clamp((lt - 0.15) / 0.9)); win.style.opacity = p; win.style.transform = `translateY(${(1-p)*50}px) scale(${lerp(.96,1,p)})`; }
+    if (s.id === 's-hero') {
+      document.getElementById('hero-img').style.transform = `scale(${1.06 + lt * 0.018}) translateX(${-lt*6}px)`;
+      const c1 = document.getElementById('hero-c1'), c2 = document.getElementById('hero-c2');
+      const p1 = eout(clamp((lt - 0.4) / 1.6)), p2 = eout(clamp((lt - 0.8) / 1.6));
+      c1.style.left = '1060px'; c2.style.left = '1420px';
+      c1.style.opacity = p1; c2.style.opacity = p2;
+      c1.style.transform = `translateX(${(1-p1)*160 - lt*4}px)`;
+      c2.style.transform = `translateX(${(1-p2)*200 - lt*6}px)`;
+    }
+    if (s.id === 's-stage') { const tg = document.getElementById('tag-stage'); const p = eout(clamp((lt-1.8)/0.6)); tg.style.opacity = p; tg.style.transform = `translateY(${(1-p)*20}px)`; }
+    if (s.id === 's-works') { el.querySelectorAll('.card img').forEach((im, i) => { im.style.transform = `translateX(-50%) translateY(${Math.sin(lt*1.4 + i)*5}px)`; }); }
+    if (s.segs) {
+      let off = 0, seg = s.segs[0];
+      for (const g of s.segs) { if (lt >= off) seg = g; off += g.len; }
+      let segStart = 0; for (const g of s.segs) { if (g === seg) break; segStart += g.len; }
+      const st = clamp(lt - segStart, 0, seg.len);
+      if (s.id === 's-teacher') document.getElementById('bar-teacher').textContent = seg.clip === 'sheet' ? '문학이 무대가 되는 순간 · 인쇄용 활동지' : '문학이 무대가 되는 순간 · 교사 운영실';
+      const frame = Math.round((seg.from + st * seg.rate) * FPS) + 1;
+      const img = document.getElementById(s.img);
+      const box = img.parentElement; const bw = box.clientWidth;
+      const k = ease(clamp(st / seg.len));
+      const [a, b] = seg.view;
+      const vx = lerp(a[0], b[0], k), vy = lerp(a[1], b[1], k), vw = lerp(a[2], b[2], k);
+      const sc = bw / vw;
+      const pxScale = 1600 / CLIPS[seg.clip].w;
+      img.style.width = CLIPS[seg.clip].w + 'px';
+      img.style.transform = `translate(${-vx*sc}px, ${-vy*sc}px) scale(${sc*pxScale})`;
+      waits.push(setImg(img, src(seg.clip, frame)));
+    }
+  }
+  await Promise.all(waits);
+};
+</script>
+</body></html>
