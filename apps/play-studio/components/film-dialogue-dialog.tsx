@@ -2,7 +2,7 @@
 import {useEffect,useRef,useState} from 'react';
 import type {DrawingProject,DialogueLine,DialogueSpeaker,DrawingNarration} from '@/lib/drawing-project';
 import {validateDrawingProject} from '@/lib/drawing-project';
-import {AI_VOICES,audioDataUrl,combineDialogue,dialogueClipKey,dialogueKey,fitNarration,transcriptionChunks} from '@/lib/film-narration';
+import {AI_VOICES,MAX_DIALOGUE_SPEAKERS,addDialogueSpeaker,removeDialogueSpeaker,audioDataUrl,combineDialogue,dialogueClipKey,dialogueKey,fitNarration,transcriptionChunks} from '@/lib/film-narration';
 type Props={project:DrawingProject;onUpdate:(change:(p:DrawingProject)=>DrawingProject)=>void;onClose:()=>void};
 export function FilmDialogueDialog({project,onUpdate,onClose}:Props){
  const dialog=useRef<HTMLDialogElement>(null),controller=useRef<AbortController|null>(null),working=useRef(false),alive=useRef(true);
@@ -15,7 +15,7 @@ export function FilmDialogueDialog({project,onUpdate,onClose}:Props){
  }
  async function post(body:Record<string,unknown>){
   const response=await fetch('/api/film-dialogue',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...body,code}),signal:controller.current!.signal});
-  const value=await response.json();if(!response.ok)throw new Error(value.error??'AI 음성 작업을 마치지 못했어요.');setAuthorized(true);return value;
+  const value=await response.json();if(response.status===401)setAuthorized(false);if(!response.ok)throw new Error(value.error??'AI 음성 작업을 마치지 못했어요.');setAuthorized(true);return value;
  }
  async function work(task:()=>Promise<void>){
   if(working.current)return;working.current=true;controller.current=new AbortController();setBusy(true);setError('');
@@ -33,13 +33,13 @@ export function FilmDialogueDialog({project,onUpdate,onClose}:Props){
  function validOrder(rows:DialogueLine[]){let previous=-1;for(const line of rows){const index=project.scenes.findIndex(s=>s.id===line.sceneId);if(index<previous||index<0)throw new Error('대사를 장면 순서대로 배치해 주세요. 장면 번호가 앞뒤로 섞여 있어요.');previous=index;}}
  async function generate(){
   if(!lines.length||lines.some(l=>!l.text.trim()))throw new Error('비어 있는 대사를 입력하거나 삭제해 주세요.');validOrder(lines);
-  if(new Set(speakers.map(s=>s.voice)).size!==speakers.length)throw new Error('등장인물마다 서로 다른 목소리를 골라 주세요.');
   let next=[...lines];persist(next,speakers);
   for(let i=0;i<next.length;i++){
    if(controller.current?.signal.aborted)throw new DOMException('Aborted','AbortError');
    const line=next[i],key=dialogueClipKey(line,speakers);if(line.clip&&line.clipKey===key)continue;
    setStatus(`${i+1} / ${next.length} 대사 · ${speakers[line.speaker].name} 목소리 만드는 중…`);
    const result=await post({action:'speak',text:line.text,voice:speakers[line.speaker].voice});next=next.map((l,j)=>j===i?{...l,clip:result.voice,clipKey:key}:l);setLines(next);persist(next,speakers);
+   if(next.reduce((n,l)=>n+(l.clip?.duration??0)+.2,0)>600)throw new Error('생성한 대사가 10분을 넘었어요. 추가 생성을 멈췄어요. 대사를 줄여 주세요.');
   }
   setStatus('대사를 순서대로 이어 붙이고 있어요…');const combined=await combineDialogue(next);
   onUpdate(p=>{
@@ -55,8 +55,9 @@ export function FilmDialogueDialog({project,onUpdate,onClose}:Props){
  return <dialog ref={dialog} className="film-dialogue-dialog" aria-labelledby="dialogue-title" onCancel={event=>{event.preventDefault();if(!busy){persist();onClose();}}}>
   <header><div><h2 id="dialogue-title">역할별 AI 목소리</h2><p>녹음을 글자로 옮긴 뒤, 대사마다 말할 인물을 정해요.</p></div><button disabled={busy} onClick={()=>{persist();onClose();}}>저장하고 닫기</button></header>
   <div className="film-dialogue-body">
-   <div className="film-speaker-count"><strong>등장인물</strong>{[2,3].map(count=><button key={count} aria-pressed={speakers.length===count} disabled={busy} onClick={()=>{const actors=Array.from({length:count},(_,i)=>speakers[i]??{name:`주인공 ${i+1}`,voice:AI_VOICES[i].id}),rows=lines.map(l=>({...l,speaker:Math.min(l.speaker,count-1)}));setSpeakers(actors);setLines(rows);persist(rows,actors);}}>{count}명</button>)}</div>
-   <div className="film-speakers">{speakers.map((speaker,index)=><div key={index}><label>{index+1}번 이름<input aria-label={`${index+1}번 등장인물 이름`} value={speaker.name} maxLength={40} disabled={busy} onChange={event=>setSpeakers(rows=>rows.map((s,i)=>i===index?{...s,name:event.target.value}:s))} onBlur={()=>persist()}/></label><label>목소리<select aria-label={`${index+1}번 목소리`} disabled={busy} value={speaker.voice} onChange={event=>{const actors=speakers.map((s,i)=>i===index?{...s,voice:event.target.value}:s);setSpeakers(actors);persist(lines,actors);}}>{AI_VOICES.map(v=><option key={v.id} value={v.id}>{v.label}</option>)}</select></label></div>)}</div>
+   <div className="film-speaker-count"><strong>등장인물 {speakers.length}명</strong><button disabled={busy||speakers.length>=MAX_DIALOGUE_SPEAKERS} onClick={()=>{const actors=addDialogueSpeaker(speakers);setSpeakers(actors);persist(lines,actors);}}>배역 추가</button><span>최대 {MAX_DIALOGUE_SPEAKERS}명</span></div>
+   <div className="film-speakers">{speakers.map((speaker,index)=><div key={index}><label>{index+1}번 이름<input aria-label={`${index+1}번 등장인물 이름`} value={speaker.name} maxLength={40} disabled={busy} onChange={event=>setSpeakers(rows=>rows.map((s,i)=>i===index?{...s,name:event.target.value}:s))} onBlur={()=>persist()}/></label><label>목소리<select aria-label={`${index+1}번 목소리`} disabled={busy} value={speaker.voice} onChange={event=>{const actors=speakers.map((s,i)=>i===index?{...s,voice:event.target.value}:s);setSpeakers(actors);persist(lines,actors);}}>{AI_VOICES.map(v=><option key={v.id} value={v.id}>{v.label}</option>)}</select></label><button aria-label={`${index+1}번 배역 삭제`} disabled={busy||speakers.length<=1||lines.some(l=>l.speaker===index)} onClick={()=>{const next=removeDialogueSpeaker(speakers,lines,index);setSpeakers(next.speakers);setLines(next.lines);persist(next.lines,next.speakers);}}>배역 삭제</button></div>)}</div>
+   <p>목소리 10종을 배역마다 선택해요. 같은 목소리를 여러 배역에 사용할 수도 있어요. 대사가 있는 배역은 대사를 다른 인물로 옮긴 뒤 삭제할 수 있어요.</p>
    {!authorized?<label>교사 확인 번호<input aria-label="AI 음성 교사 확인 번호" type="password" inputMode="numeric" autoComplete="off" value={code} disabled={busy} onChange={e=>setCode(e.target.value)}/></label>:null}
    {configured===false?<p role="status">GPT API 설정에서 키를 먼저 저장해 주세요. 대사와 배역은 미리 작성할 수 있어요.</p>:null}
    <section className="film-transcript"><h3>1. 녹음을 대사로 옮기기</h3><button disabled={aiDisabled} onClick={()=>void work(transcribe)}>녹음을 글자로 바꾸기</button><label>전체 대사<textarea aria-label="전체 대사 글" rows={5} maxLength={16000} disabled={busy} value={transcript} placeholder="녹음을 글자로 바꾸거나, 가지고 있는 대본을 붙여 넣으세요." onChange={e=>setTranscript(e.target.value)} onBlur={()=>persist()}/></label><button disabled={aiDisabled||!transcript.trim()} onClick={()=>void work(assign)}>대사 배역 초안 나누기</button></section>
@@ -64,7 +65,7 @@ export function FilmDialogueDialog({project,onUpdate,onClose}:Props){
     <div className="film-dialogue-lines">{lines.map((line,index)=><div className="film-dialogue-line" key={line.id}><b>{index+1}</b><label><span className="draw-sr">장면</span><select aria-label={`${index+1}번 대사 장면`} value={line.sceneId} disabled={busy} onChange={e=>{const rows=lines.map((l,i)=>i===index?{...l,sceneId:e.target.value}:l);setLines(rows);persist(rows);}}>{project.scenes.map((s,i)=><option key={s.id} value={s.id}>{i+1}. {s.title}</option>)}</select></label><label><span className="draw-sr">말할 인물</span><select aria-label={`${index+1}번 대사 인물`} value={line.speaker} disabled={busy} onChange={e=>{const rows=lines.map((l,i)=>i===index?{...l,speaker:Number(e.target.value)}:l);setLines(rows);persist(rows);}}>{speakers.map((s,i)=><option key={i} value={i}>{s.name||`주인공 ${i+1}`}</option>)}</select></label><textarea aria-label={`${index+1}번 대사`} rows={2} maxLength={500} disabled={busy} value={line.text} onChange={e=>changeLine(index,{text:e.target.value})} onBlur={()=>persist()}/><button aria-label={`${index+1}번 대사 삭제`} disabled={busy} onClick={()=>{const rows=lines.filter((_,i)=>i!==index);setLines(rows);persist(rows);}}>삭제</button>{line.clip&&line.clipKey===dialogueClipKey(line,speakers)?<audio controls src={line.clip.source} aria-label={`${index+1}번 AI 대사 듣기`}/>:null}</div>)}</div>
     <button disabled={busy||lines.length>=80} onClick={()=>{const rows=[...lines,{id:`line-${crypto.randomUUID()}`,sceneId:lines.at(-1)?.sceneId??project.scenes[0].id,speaker:0,text:''}];setLines(rows);persist(rows);}}>대사 한 줄 추가</button>
    </section>
-   <section><h3>3. AI 목소리 만들기</h3><p>역할마다 다른 AI 목소리로 읽어요. 원본 녹음은 따로 보관됩니다. 생성된 목소리는 AI 음성입니다.</p><p>완료된 대사 {complete} / {lines.length}개. 변경한 대사만 새로 생성해요.</p><button className="film-primary" disabled={aiDisabled||!lines.length} onClick={()=>void work(generate)}>역할별 목소리 생성</button>{busy?<button onClick={()=>controller.current?.abort()}>작업 중단</button>:null}<p>‘녹음을 글자로 바꾸기’는 녹음 파일을, 배역 나누기와 목소리 생성은 대사 글을 OpenAI로 보내며 API 이용 요금이 발생해요.</p></section>
+   <section><h3>3. AI 목소리 만들기</h3><p>배역별로 선택한 AI 목소리로 읽어요. 원본 녹음은 따로 보관됩니다. 생성된 목소리는 AI 음성입니다.</p><p>완료된 대사 {complete} / {lines.length}개. 변경한 대사만 새로 생성해요.</p><button className="film-primary" disabled={aiDisabled||!lines.length} onClick={()=>void work(generate)}>역할별 목소리 생성</button>{busy?<button onClick={()=>controller.current?.abort()}>작업 중단</button>:null}<p>‘녹음을 글자로 바꾸기’는 녹음 파일을, 배역 나누기와 목소리 생성은 대사 글을 OpenAI로 보내며 API 이용 요금이 발생해요.</p></section>
    {status?<p role="status">{status}</p>:null}{error?<p className="film-alert" role="alert">{error}</p>:null}
   </div>
  </dialog>;

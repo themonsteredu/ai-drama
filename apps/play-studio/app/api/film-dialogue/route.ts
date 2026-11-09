@@ -1,6 +1,6 @@
 import {randomUUID} from 'node:crypto';
 import {authenticated,authorizeGeneration,failure,readBody,reply,sameOrigin,savedApiKey,sessionCookie,SettingsError} from '../../../lib/play-ai-server';
-import {AI_VOICES} from '../../../lib/film-narration';
+import {AI_VOICES,MAX_DIALOGUE_SPEAKERS} from '../../../lib/film-narration';
 import {TRANSCRIBE_MODEL,DIALOGUE_MODEL,openaiJson,speakLine} from '../../../lib/play-dialogue-server';
 export const runtime='nodejs';
 export const maxDuration=120;
@@ -20,7 +20,7 @@ export async function POST(request:Request){
    return respond({text:result.text});
   }
   if(body.action==='assign'){
-   if(typeof body.text!=='string'||!body.text.trim()||body.text.length>16000||!Array.isArray(body.speakers)||body.speakers.length<2||body.speakers.length>3||!body.speakers.every(s=>typeof s==='string'&&s.length<=40)||!Array.isArray(body.scenes)||body.scenes.length<1||body.scenes.length>6)throw new SettingsError('대사와 등장인물 수를 확인해 주세요.');
+   if(typeof body.text!=='string'||!body.text.trim()||body.text.length>16000||!Array.isArray(body.speakers)||body.speakers.length<1||body.speakers.length>MAX_DIALOGUE_SPEAKERS||!body.speakers.every(s=>typeof s==='string'&&s.length<=40)||!Array.isArray(body.scenes)||body.scenes.length<1||body.scenes.length>6)throw new SettingsError('대사와 등장인물 수를 확인해 주세요.');
    const scenes=body.scenes as {id:string;title:string}[];
    if(!scenes.every(s=>typeof s?.id==='string'&&s.id.length<=150&&typeof s.title==='string'&&s.title.length<=40))throw new SettingsError('장면을 확인해 주세요.');
    const schema={type:'object',additionalProperties:false,required:['lines'],properties:{lines:{type:'array',minItems:1,maxItems:80,items:{type:'object',additionalProperties:false,required:['scene','speaker','text'],properties:{scene:{type:'integer',minimum:0,maximum:scenes.length-1},speaker:{type:'integer',minimum:0,maximum:body.speakers.length-1},text:{type:'string',minLength:1,maxLength:500}}}}}};

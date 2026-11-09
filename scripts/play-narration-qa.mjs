@@ -15,7 +15,7 @@ try{
  const local=createRequire(path.join(temp,'entry.js'));
  const {emptyFourSceneProject}=local('./apps/play-studio/lib/four-scene.js');
  const {validateDrawingProject,parseDrawingFile}=local('./apps/play-studio/lib/drawing-project.js');
- const {addNarration,narrationDurations,setNarrationBoundary,activeNarration,dialogueKey,wavBytes}=local('./apps/play-studio/lib/film-narration.js');
+ const {addNarration,narrationDurations,setNarrationBoundary,activeNarration,dialogueKey,wavBytes,addDialogueSpeaker,removeDialogueSpeaker}=local('./apps/play-studio/lib/film-narration.js');
  const {movieSeconds,movieTimeline}=local('./apps/play-studio/lib/drawing-movie.js');
  const {selectedCharacterPixels,actorPlacement}=local('./apps/play-studio/lib/scene-character.js');
  const originalPixels=new Uint8ClampedArray([1,2,3,255,40,50,60,255,70,80,90,128,4,5,6,255]);
@@ -32,6 +32,11 @@ try{
  p.narration.enabled=false;assert.equal(activeNarration(p),null);assert.equal(p.scenes[0].voice.duration,100);
  assert(!validateDrawingProject({...p,narration:{...p.narration,durations:{a:NaN}}}));
  p.narration.lines=[{id:'a',sceneId:p.scenes[0].id,speaker:0,text:'안녕.'}];const key1=dialogueKey(p.narration);p.narration.lines[0].text='반가워.';assert.notEqual(key1,dialogueKey(p.narration));
+ let roles=[...p.narration.speakers];while(roles.length<30)roles=addDialogueSpeaker(roles);assert.equal(roles.length,30);assert.throws(()=>addDialogueSpeaker(roles));
+ const assignedLines=[{id:'kept',sceneId:p.scenes[0].id,speaker:3,text:'대사 유지',clip:{id:'voice-cached',source:'data:audio/wav;base64,UklGRg==',duration:1},clipKey:'cached'}];
+ const removed=removeDialogueSpeaker(roles,assignedLines,1);assert.equal(removed.lines[0].speaker,2);assert.equal(removed.speakers[2].voice,roles[3].voice);assert.deepEqual(removed.lines[0].clip,assignedLines[0].clip);assert.throws(()=>removeDialogueSpeaker(roles,assignedLines,3));
+ assert(validateDrawingProject({...p,narration:{...p.narration,speakers:roles,lines:assignedLines}}));
+ console.log('PASS: roles grow to 30, unused-role removal preserves speaker identity and cached speech, referenced roles cannot be removed accidentally.');
  const wav=wavBytes(new Float32Array(1600));assert.equal(new DataView(wav.buffer).getUint32(24,true),16000);assert.equal(wav.length,3244);
  console.log('PASS: original character RGBA preserved, letterbox placement, continuous narration timeline, boundary edits, no speech truncation, legacy audio and backup round trip.');
 
@@ -59,6 +64,7 @@ try{
  const transcribed=await route.POST(req({action:'transcribe',audio:'data:audio/wav;base64,'+Buffer.from(wav).toString('base64')}));assert.equal(transcribed.status,200);assert.equal((await transcribed.json()).text,'안녕. 반가워.');
  const assign={action:'assign',text:'안녕. 반가워.',speakers:['토끼','곰'],scenes:[{id:'a',title:'숲'},{id:'b',title:'집'}]};
  const assigned=await route.POST(req(assign));assert.equal(assigned.status,200);assert.deepEqual((await assigned.json()).lines.map(l=>l.sceneId),['a','b']);
+ assert.equal((await route.POST(req({...assign,speakers:Array.from({length:30},(_,i)=>`배역 ${i+1}`)}))).status,200);assert.equal((await route.POST(req({...assign,speakers:Array.from({length:31},(_,i)=>`배역 ${i+1}`)}))).status,400);
  invalidAssignment=true;assert.equal((await route.POST(req(assign))).status,400);invalidAssignment=false;
  for(const voice of ['coral','cedar','marin']){const response=await route.POST(req({action:'speak',text:'안녕.',voice}));assert.equal(response.status,200);const value=await response.json();assert.equal(value.voice.duration,.1);assert(!JSON.stringify(value).includes(key));}
  assert.deepEqual(requestedVoices,['coral','cedar','marin']);

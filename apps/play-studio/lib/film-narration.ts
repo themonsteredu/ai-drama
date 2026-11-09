@@ -1,7 +1,18 @@
 import type {DrawingProject,DrawingNarration,DrawingVoice,DialogueLine,DialogueSpeaker} from '../../../packages/stage-core/src/drawing';
 export const NARRATION_MAX_SECONDS=600;
-export const AI_VOICES=[{id:'coral',label:'코럴'},{id:'cedar',label:'시더'},{id:'marin',label:'마린'},{id:'ash',label:'애쉬'},{id:'sage',label:'세이지'},{id:'shimmer',label:'쉬머'}];
+export const MAX_DIALOGUE_SPEAKERS=30;
+export const AI_VOICES=[{id:'coral',label:'코럴'},{id:'cedar',label:'시더'},{id:'marin',label:'마린'},{id:'ash',label:'애쉬'},{id:'sage',label:'세이지'},{id:'shimmer',label:'쉬머'},{id:'alloy',label:'알로이'},{id:'ballad',label:'발라드'},{id:'echo',label:'에코'},{id:'verse',label:'버스'}];
 export const defaultSpeakers=():DialogueSpeaker[]=>[{name:'주인공 1',voice:'coral'},{name:'주인공 2',voice:'cedar'}];
+export function addDialogueSpeaker(speakers:DialogueSpeaker[]){
+ if(speakers.length>=MAX_DIALOGUE_SPEAKERS)throw new Error('한 작품에 배역은 30명까지 만들 수 있어요.');
+ const voice=AI_VOICES.find(v=>!speakers.some(s=>s.voice===v.id))??AI_VOICES[speakers.length%AI_VOICES.length];
+ return [...speakers,{name:`배역 ${speakers.length+1}`,voice:voice.id}];
+}
+export function removeDialogueSpeaker(speakers:DialogueSpeaker[],lines:DialogueLine[],index:number){
+ if(speakers.length<=1||index<0||index>=speakers.length)throw new Error('배역은 한 명 이상 있어야 해요.');
+ if(lines.some(l=>l.speaker===index))throw new Error('이 배역의 대사를 다른 인물로 바꾼 뒤 삭제해 주세요.');
+ return {speakers:speakers.filter((_,i)=>i!==index),lines:lines.map(l=>({...l,speaker:l.speaker>index?l.speaker-1:l.speaker}))};
+}
 const object=(v:unknown):v is Record<string,unknown>=>!!v&&typeof v==='object'&&!Array.isArray(v);
 function validAudio(v:unknown,maxSeconds=600){
  return object(v)&&typeof v.id==='string'&&v.id.startsWith('voice-')&&v.id.length<=150&&typeof v.duration==='number'&&Number.isFinite(v.duration)&&v.duration>0&&v.duration<=maxSeconds+.1&&typeof v.source==='string'&&v.source.length<=26_000_000&&/^data:audio\/wav;base64,[A-Za-z0-9+/]+={0,2}$/.test(v.source);
@@ -14,7 +25,7 @@ export function validateNarration(value:unknown){
  if(value.generated!==undefined&&!validAudio(value.generated))return false;
  if(value.useGenerated&&!value.generated)return false;
  if(Object.keys(value.durations).length>50||!Object.entries(value.durations).every(([k,v])=>k.length<=150&&typeof v==='number'&&Number.isFinite(v)&&v>=1&&v<=600))return false;
- if(!Array.isArray(value.speakers)||value.speakers.length<2||value.speakers.length>3||!value.speakers.every(s=>object(s)&&typeof s.name==='string'&&s.name.length<=40&&AI_VOICES.some(v=>v.id===s.voice)))return false;
+ if(!Array.isArray(value.speakers)||value.speakers.length<1||value.speakers.length>MAX_DIALOGUE_SPEAKERS||!value.speakers.every(s=>object(s)&&typeof s.name==='string'&&s.name.length<=40&&AI_VOICES.some(v=>v.id===s.voice)))return false;
  if(!Array.isArray(value.lines)||value.lines.length>80||!value.lines.every(l=>object(l)&&typeof l.id==='string'&&l.id.length<=150&&typeof l.sceneId==='string'&&l.sceneId.length<=150&&Number.isInteger(l.speaker)&&Number(l.speaker)>=0&&Number(l.speaker)<(value.speakers as unknown[]).length&&typeof l.text==='string'&&l.text.length<=500&&(l.clip===undefined||validAudio(l.clip,60))&&(l.clipKey===undefined||(typeof l.clipKey==='string'&&l.clipKey.length<=800))))return false;
  const bytes=(value.original as DrawingVoice).source.length+((value.generated as DrawingVoice)?.source.length??0)+(value.lines as DialogueLine[]).reduce((n,l)=>n+(l.clip?.source.length??0),0);
  return bytes<=78_000_000&&(value.generatedKey===undefined||(typeof value.generatedKey==='string'&&value.generatedKey.length<=65_000));
