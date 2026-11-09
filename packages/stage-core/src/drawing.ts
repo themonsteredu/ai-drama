@@ -12,6 +12,9 @@ export interface DrawingItem {
   target?: { x: number; y: number }; speech: string;
 }
 export interface DrawingScene {
+  durationSeconds?: number;
+  stillOriginalAssetId?: string;
+  protectedMask?: string;
   /** undefined inherits project music; null explicitly silences this scene. */
   music?: DrawingMusic | null;
   /** The recorded voice for this scene. Absent until the child records one. */

@@ -18,8 +18,8 @@ function safeItemPoint(item:DrawingItem,asset:DrawingAsset,pos:{x:number;y:numbe
   return {x:bounded(pos.x,side,100-side),y:bounded(pos.y,top,99-accentDown)};
 }
 
-export function useDrawingEditor(){
-  const [project,setProject]=useState<DrawingProject>(emptyDrawingProject),projectRef=useRef(project);
+export function useDrawingEditor(storageKey='active',initialProject=emptyDrawingProject){
+  const [project,setProject]=useState<DrawingProject>(initialProject),projectRef=useRef(project);
   const [selectedId,setSelectedId]=useState<string>(),[playing,setPlaying]=useState(false),[reset,setReset]=useState(0),[destination,setDestination]=useState(false);
   const [loaded,setLoaded]=useState(false),[blocked,setBlocked]=useState(false),[saveState,setSaveState]=useState('불러오는 중'),[error,setError]=useState(''),[busy,setBusy]=useState(false);
   const [recording,setRecording]=useState(false),[recordSeconds,setRecordSeconds]=useState(0),[storyPlaying,setStoryPlaying]=useState(false),[voicePlaying,setVoicePlaying]=useState(false);
@@ -29,9 +29,9 @@ export function useDrawingEditor(){
   const clock=useRef(0),past=useRef<DrawingProject[]>([]),future=useRef<DrawingProject[]>([]);
   const drag=useRef<{id:string;pointerId:number;dx:number;dy:number;start:DrawingProject;moved:boolean}|null>(null);
   const scene=project.scenes.find(s=>s.id===project.activeSceneId)??project.scenes[0],selected=scene.items.find(i=>i.id===selectedId),selectedAsset=project.assets.find(a=>a.id===selected?.assetId);
-  useEffect(()=>{let gone=false;void loadDrawing().then(p=>{if(gone)return;if(p){projectRef.current=p;setProject(p);}}).catch(cause=>{if(!gone){setBlocked(true);setSaveState('저장 확인 필요');setError(cause instanceof Error?cause.message:'저장 내용을 읽지 못했어요.');}}).finally(()=>{if(!gone)setLoaded(true);});return()=>{gone=true;};},[]);
-  useEffect(()=>{if(!loaded||blocked)return;let canceled=false;setSaveState('저장 중');const timer=setTimeout(()=>{void saveDrawing(project).then(()=>{if(!canceled)setSaveState('이 기기에 저장됨');}).catch(()=>{if(!canceled){setSaveState('저장 확인 필요');setError('기기 저장을 마치지 못했어요. 작품 파일로 보관해 주세요.');}});},350);return()=>{canceled=true;clearTimeout(timer);};},[project,loaded,blocked]);
-  useEffect(()=>{if(!loaded||blocked)return;const flush=()=>{void saveDrawing(projectRef.current).catch(()=>{});};const hidden=()=>{if(document.visibilityState==='hidden'){pause();flush();}};window.addEventListener('pagehide',flush);document.addEventListener('visibilitychange',hidden);return()=>{window.removeEventListener('pagehide',flush);document.removeEventListener('visibilitychange',hidden);};},[loaded,blocked]);
+  useEffect(()=>{let gone=false;void loadDrawing(storageKey).then(p=>{if(gone)return;if(p){projectRef.current=p;setProject(p);}}).catch(cause=>{if(!gone){setBlocked(true);setSaveState('저장 확인 필요');setError(cause instanceof Error?cause.message:'저장 내용을 읽지 못했어요.');}}).finally(()=>{if(!gone)setLoaded(true);});return()=>{gone=true;};},[]);
+  useEffect(()=>{if(!loaded||blocked)return;let canceled=false;setSaveState('저장 중');const timer=setTimeout(()=>{void saveDrawing(project,storageKey).then(()=>{if(!canceled)setSaveState('이 기기에 저장됨');}).catch(()=>{if(!canceled){setSaveState('저장 확인 필요');setError('기기 저장을 마치지 못했어요. 작품 파일로 보관해 주세요.');}});},350);return()=>{canceled=true;clearTimeout(timer);};},[project,loaded,blocked]);
+  useEffect(()=>{if(!loaded||blocked)return;const flush=()=>{void saveDrawing(projectRef.current,storageKey).catch(()=>{});};const hidden=()=>{if(document.visibilityState==='hidden'){pause();flush();}};window.addEventListener('pagehide',flush);document.addEventListener('visibilitychange',hidden);return()=>{window.removeEventListener('pagehide',flush);document.removeEventListener('visibilitychange',hidden);};},[loaded,blocked]);
   function pause(){musicPlayer.current?.pause();setPlaying(false);}
   function start(){musicPlayer.current??=new DrawingMusicPlayer();musicPlayer.current.play(projectRef.current,projectRef.current.scenes.find(s=>s.id===projectRef.current.activeSceneId)!,setError);setDestination(false);setPlaying(true);}
   function endStory(){storyOn.current=false;clearTimeout(storyTimer.current);voicePlayer.current?.stop();setVoicePlaying(false);setStoryPlaying(false);}
@@ -57,7 +57,7 @@ export function useDrawingEditor(){
   function addScene(copy=false){if(project.scenes.length>=6)return;const id=drawingId('scene');const next=copy?{...structuredClone(scene),id,title:`장면 ${project.scenes.length+1}`,items:scene.items.map(i=>({...i,id:drawingId('drawing')}))}:newDrawingScene(id,`장면 ${project.scenes.length+1}`);commit(p=>({...p,activeSceneId:id,scenes:[...p.scenes,next]}));setSelectedId(undefined);setDestination(false);}
   function switchScene(id:string){const p=projectRef.current,s=p.scenes.find(s=>s.id===id);if(!s||id===p.activeSceneId)return;clock.current=0;setReset(n=>n+1);if(playing)musicPlayer.current?.play(p,s,setError);else musicPlayer.current?.stop();setDestination(false);setSelectedId(undefined);setValue({...p,activeSceneId:id});}
   function deleteScene(){if(project.scenes.length===1||!confirm('이 장면을 지울까요? 실행 취소로 되돌릴 수 있어요.'))return;const scenes=project.scenes.filter(s=>s.id!==scene.id);commit(p=>({...p,scenes,activeSceneId:scenes[0].id}));setSelectedId(undefined);setDestination(false);}
-  function newWork(){if(!confirm('새 작품을 시작할까요? 지금 작품은 먼저 작품 파일로 보관해 주세요.'))return;setBlocked(false);setError('');commit(()=>({...emptyDrawingProject(),id:drawingId('project')}));setSelectedId(undefined);setDestination(false);}
+  function newWork(){if(!confirm('새 작품을 시작할까요? 지금 작품은 먼저 작품 파일로 보관해 주세요.'))return;setBlocked(false);setError('');commit(()=>({...initialProject(),id:drawingId('project')}));setSelectedId(undefined);setDestination(false);}
   function point(e:ReactPointerEvent<HTMLCanvasElement>){const r=e.currentTarget.getBoundingClientRect();return {x:bounded((e.clientX-r.left)/r.width*100,0,100),y:bounded((e.clientY-r.top)/r.height*100,0,100)};}
   function down(e:ReactPointerEvent<HTMLCanvasElement>){
     if(!loaded||playing)return;const pos=point(e);
@@ -68,8 +68,8 @@ export function useDrawingEditor(){
   function move(e:ReactPointerEvent<HTMLCanvasElement>){const d=drag.current;if(!d||d.pointerId!==e.pointerId)return;const pos=point(e);d.moved=true;const p=projectRef.current;setValue({...p,scenes:p.scenes.map(s=>s.id===p.activeSceneId?{...s,items:s.items.map(i=>{if(i.id!==d.id)return i;const asset=p.assets.find(a=>a.id===i.assetId);const raw={x:pos.x-d.dx,y:pos.y-d.dy};const next=asset?safeItemPoint(i,asset,raw):{x:bounded(raw.x,2,98),y:bounded(raw.y,5,98)};return {...i,...next};})}:s)});}
   function up(e:ReactPointerEvent<HTMLCanvasElement>){const d=drag.current;if(!d||d.pointerId!==e.pointerId)return;drag.current=null;if(d.moved){past.current=[...past.current.slice(-29),d.start];future.current=[];setValue({...projectRef.current,updatedAt:new Date().toISOString()});}}
   function cancel(){if(drag.current){setValue(drag.current.start);drag.current=null;}}
-  async function importWork(file:File){setBusy(true);try{if(file.size>DRAWING_FILE_LIMIT)throw new Error('작품 파일은 20MB 이하로 골라 주세요.');const next=parseDrawingFile(await file.text());await loadDrawingImages(next.assets);if(!confirm('불러온 작품으로 바꿀까요? 현재 작품은 먼저 파일로 보관해 주세요.'))return;setBlocked(false);commit(()=>next);setError('');setSelectedId(undefined);setDestination(false);}catch(cause){setError(cause instanceof Error?cause.message:'작품을 읽지 못했어요.');}finally{setBusy(false);}}
-  function backup(){const blob=new Blob([JSON.stringify(project)],{type:'application/json'});if(blob.size>DRAWING_FILE_LIMIT){setError('작품 파일이 20MB를 넘어요. 사용하지 않는 그림이나 음악을 줄여 주세요.');return;}downloadBlob(blob,`${fileName(project.title)}.moakit-drawing.json`);}
+  async function importWork(file:File){setBusy(true);try{if(file.size>DRAWING_FILE_LIMIT)throw new Error('작품 파일은 64MB 이하로 골라 주세요.');const next=parseDrawingFile(await file.text());await loadDrawingImages(next.assets);if(!confirm('불러온 작품으로 바꿀까요? 현재 작품은 먼저 파일로 보관해 주세요.'))return;setBlocked(false);commit(()=>next);setError('');setSelectedId(undefined);setDestination(false);}catch(cause){setError(cause instanceof Error?cause.message:'작품을 읽지 못했어요.');}finally{setBusy(false);}}
+  function backup(){const blob=new Blob([JSON.stringify(project)],{type:'application/json'});if(blob.size>DRAWING_FILE_LIMIT){setError('작품 파일이 64MB를 넘어요. 사용하지 않는 그림이나 음악을 줄여 주세요.');return;}downloadBlob(blob,`${fileName(project.title)}.moakit-drawing.json`);}
   async function startVoice(){
     if(!loaded||recording||session.current)return;
     stop();setError('');setRecordSeconds(0);

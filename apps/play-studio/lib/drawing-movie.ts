@@ -5,7 +5,8 @@ import {effectiveMusic} from './drawing-music';
 /** A scene lasts as long as its voice, plus a breath. Silent scenes get a readable default. */
 export const SCENE_PAD=.7,SCENE_MIN=2.5,SCENE_SILENT=4,VOICE_LEAD=.25;
 export function sceneSeconds(scene:DrawingScene){
- return Math.max(SCENE_MIN,scene.voice?scene.voice.duration+VOICE_LEAD+SCENE_PAD:SCENE_SILENT);
+ const minimum=Math.max(SCENE_MIN,scene.voice?scene.voice.duration+VOICE_LEAD:0);
+ return Math.max(minimum,scene.durationSeconds??(scene.voice?scene.voice.duration+VOICE_LEAD+SCENE_PAD:SCENE_SILENT));
 }
 export function movieSeconds(project:DrawingProject){
  return project.scenes.reduce((sum,scene)=>sum+sceneSeconds(scene),0);
@@ -124,11 +125,12 @@ export async function recordMovie(project:DrawingProject,images:RasterCache,onPr
   for(const scene of project.scenes){
    const music=musicSource(project,scene);
    if(music&&!cache.has(music.url))cache.set(music.url,await decodeQuietly(context,music.url));
+   if(music&&!cache.get(music.url))throw new Error('배경음악을 읽지 못했어요. 음악을 다시 선택해 주세요.');
    let voice:AudioBuffer|null=null;
    if(scene.voice){
     if(!cache.has(scene.voice.source))cache.set(scene.voice.source,await decodeQuietly(context,scene.voice.source));
     voice=cache.get(scene.voice.source)??null;
-    if(!voice)lostVoices+=1;
+    if(!voice)throw new Error(`${scene.title}의 대사 파일을 읽지 못했어요. 대사가 빠진 영상은 저장하지 않았어요. 녹음 파일을 다시 넣어 주세요.`);
    }
    plan.push({scene,at,seconds:sceneSeconds(scene),music,voice});
    at+=sceneSeconds(scene);
@@ -153,12 +155,19 @@ export async function recordMovie(project:DrawingProject,images:RasterCache,onPr
   // field altogether, and the saved movie then reports no length at all.
   recorder.start();
   const base=context.currentTime+.15;
+  // Adjacent scenes with the same soundtrack share one source, so music never restarts at each cut.
+  const musicRuns:{music:NonNullable<ReturnType<typeof musicSource>>;at:number;seconds:number}[]=[];
   for(const step of plan){
-   if(step.music){
-    const buffer=cache.get(step.music.url);
-    if(buffer)sources.push(schedule(context,destination,buffer,base+step.at,step.seconds,step.music.volume,step.music.loop));
-    if(buffer)sources.push(schedule(context,monitor,buffer,base+step.at,step.seconds,step.music.volume,step.music.loop));
-   }
+   if(!step.music)continue;
+   const last=musicRuns[musicRuns.length-1];
+   if(last&&Math.abs(last.at+last.seconds-step.at)<.001&&JSON.stringify(last.music)===JSON.stringify(step.music))last.seconds+=step.seconds;
+   else musicRuns.push({music:step.music,at:step.at,seconds:step.seconds});
+  }
+  for(const run of musicRuns){
+   const buffer=cache.get(run.music.url);
+   if(buffer){sources.push(schedule(context,destination,buffer,base+run.at,run.seconds,run.music.volume,run.music.loop));sources.push(schedule(context,monitor,buffer,base+run.at,run.seconds,run.music.volume,run.music.loop));}
+  }
+  for(const step of plan){
    if(step.voice){
     sources.push(schedule(context,destination,step.voice,base+step.at+VOICE_LEAD,step.seconds,1,false));
     sources.push(schedule(context,monitor,step.voice,base+step.at+VOICE_LEAD,step.seconds,1,false));

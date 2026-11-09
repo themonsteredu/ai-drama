@@ -11,19 +11,19 @@ function openDatabase(){
   }).catch(error=>{database=undefined;throw error;});
   return database;
 }
-export async function loadDrawing():Promise<DrawingProject|null>{
+export async function loadDrawing(key='active'):Promise<DrawingProject|null>{
   const db=await openDatabase();return new Promise((resolve,reject)=>{
-    const tx=db.transaction('projects','readonly');const request=tx.objectStore('projects').get('active');
+    const tx=db.transaction('projects','readonly');const request=tx.objectStore('projects').get(key);
     request.onerror=()=>reject(request.error);
     request.onsuccess=()=>{if(request.result===undefined)resolve(null);else if(validateDrawingProject(request.result))resolve(request.result);else reject(new Error('저장된 그림을 읽지 못했어요. 원래 저장 내용은 지우지 않았어요.'));};
   });
 }
 let writes=Promise.resolve();
 /** Serialize transactions so a slower older save never replaces a newer work. */
-export function saveDrawing(project:DrawingProject):Promise<void>{
+export function saveDrawing(project:DrawingProject,key='active'):Promise<void>{
   const task=writes.catch(()=>{}).then(async()=>{
     const db=await openDatabase();return new Promise<void>((resolve,reject)=>{
-      const tx=db.transaction('projects','readwrite');tx.objectStore('projects').put(project,'active');
+      const tx=db.transaction('projects','readwrite');tx.objectStore('projects').put(project,key);
       tx.oncomplete=()=>resolve();tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error??new Error('저장을 마치지 못했어요.'));
     });
   });writes=task;return task;
