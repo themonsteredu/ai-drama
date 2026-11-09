@@ -49,12 +49,12 @@ export async function readMusic(file:File):Promise<DrawingMusicAsset>{
 
 /** One active media element per player; common tracks keep their element across scenes. */
 export class DrawingMusicPlayer{
- private audio:HTMLAudioElement|null=null;private key='';private generation=0;
+ private audio:HTMLAudioElement|null=null;private key='';private generation=0;private generatedUrl:string|null=null;
  private element(){if(!this.audio){this.audio=new Audio();this.audio.dataset.moakitMusic='true';this.audio.preload='auto';}return this.audio;}
  play(p:DrawingProject,s:DrawingScene,onError:(message:string)=>void,onEnded?:()=>void){
   const m=effectiveMusic(p,s);if(!m){this.stop();return;}
   const key=`${s.music===undefined?'all':s.id}:${m.trackId}`;
-  if(this.key!==key){this.stop();this.key=key;const next=this.element(),asset=p.musicAssets?.find(a=>a.id===m.trackId);next.src=asset?asset.source:`/play-music/${m.trackId}.wav`;}
+  if(this.key!==key){this.stop();this.key=key;const next=this.element(),asset=p.musicAssets?.find(a=>a.id===m.trackId);if(this.generatedUrl){URL.revokeObjectURL(this.generatedUrl);this.generatedUrl=null;}if(asset)next.src=asset.source;else{this.generatedUrl=URL.createObjectURL(synthMusic(m.trackId));next.src=this.generatedUrl;}}
   const audio=this.element();
   audio.onended=onEnded??null;audio.volume=m.volume;audio.loop=m.loop;const generation=++this.generation;
   // A finished non-looping track stays finished across a common-music scene switch.
@@ -64,5 +64,5 @@ export class DrawingMusicPlayer{
  pause(){this.generation++;this.audio?.pause();}
  // Preserve a paused common track's source and playback position across scenes.
  stop(){this.pause();if(this.audio?.readyState){this.audio.currentTime=0;}this.key='';}
- dispose(){this.stop();if(this.audio){this.audio.removeAttribute('src');this.audio.load();this.audio=null;}}
+ dispose(){this.stop();if(this.generatedUrl){URL.revokeObjectURL(this.generatedUrl);this.generatedUrl=null;}if(this.audio){this.audio.removeAttribute('src');this.audio.load();this.audio=null;}}
 }

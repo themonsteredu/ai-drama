@@ -1,6 +1,6 @@
 import type {DrawingProject,DrawingScene} from '../../../packages/stage-core/src/drawing';
 import {drawDrawingScene,DRAW_WIDTH,DRAW_HEIGHT,type RasterCache} from './drawing-renderer';
-import {effectiveMusic} from './drawing-music';
+import {effectiveMusic,synthMusic} from './drawing-music';
 
 /** A scene lasts as long as its voice, plus a breath. Silent scenes get a readable default. */
 export const SCENE_PAD=.7,SCENE_MIN=2.5,SCENE_SILENT=4,VOICE_LEAD=.25;
@@ -41,6 +41,8 @@ function musicSource(project:DrawingProject,scene:DrawingScene){
  return {url:asset?asset.source:`/play-music/${music.trackId}.wav`,volume:music.volume,loop:music.loop};
 }
 async function decode(context:AudioContext,url:string){
+ const preset=/^\/play-music\/(music-[a-z]+)\.wav$/.exec(url);
+ if(preset)return context.decodeAudioData(await synthMusic(preset[1]).arrayBuffer());
  const response=await fetch(url);
  if(!response.ok)throw new Error('소리를 읽지 못했어요.');
  return context.decodeAudioData(await response.arrayBuffer());
