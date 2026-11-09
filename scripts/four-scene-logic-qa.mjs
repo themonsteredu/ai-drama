@@ -11,7 +11,7 @@ try{
  await compile('packages/stage-core/src/drawing.ts');await compile('apps/play-studio/app/api/film-background/route.ts');
  const local=createRequire(path.join(temp,'entry.js'));
  const {sceneSeconds,movieSeconds}=local('./apps/play-studio/lib/drawing-movie.js');
- const {emptyFourSceneProject}=local('./apps/play-studio/lib/four-scene.js');
+ const {emptyFourSceneProject,prepareFourScenes,putScenePicture}=local('./apps/play-studio/lib/four-scene.js');
  const {validateDrawingProject,parseDrawingFile}=local('./apps/play-studio/lib/drawing-project.js');
  const {applyVoice}=local('./apps/play-studio/lib/drawing-voice.js');
  let p=emptyFourSceneProject();assert.equal(p.scenes.length,4);assert(validateDrawingProject(p));
@@ -22,4 +22,14 @@ try{
  p.scenes[0].durationSeconds=40;assert.equal(movieSeconds(p),52);assert.equal(parseDrawingFile(JSON.stringify(p)).scenes[0].voice.duration,32);
  assert(!validateDrawingProject({...p,scenes:p.scenes.map(s=>({...s,durationSeconds:-2}))}));
  console.log('PASS: four scenes, imported 32-second dialogue, manual timing, no dialogue truncation and backup round trip.');
+ const raster='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jE9sAAAAASUVORK5CYII=';
+ const character={id:'kept-character',name:'아이 그림',kind:'person',width:1,height:1,source:raster};
+ const spare={...character,id:'unused-library-picture',name:'보관 중 그림'};
+ let legacy={...p,assets:[character,spare],scenes:[{...p.scenes[0],weather:'wind',items:[{id:'actor',assetId:character.id,x:50,y:70,width:20,rotation:0,flipped:false,motion:'hop',speed:'slow',speech:'안녕'}]}]};
+ const prepared=prepareFourScenes(legacy);assert.equal(prepared.scenes.length,4);assert.deepEqual(prepared.scenes[0],legacy.scenes[0]);assert.deepEqual(prepared.assets,legacy.assets);
+ const extended=putScenePicture(prepared,prepared.scenes[0].id,{source:raster,width:1,height:1});
+ assert(extended.assets.some(a=>a.id===spare.id),'unused library drawings survive');assert.deepEqual(extended.scenes[0].items,legacy.scenes[0].items,'character motions survive');assert.equal(extended.scenes[0].weather,'wind');assert.equal(extended.scenes[0].voice.duration,32);assert(validateDrawingProject(extended));
+ const six={...extended,scenes:[...extended.scenes,{...extended.scenes[1],id:'fifth'},{...extended.scenes[1],id:'sixth'}]};assert.equal(prepareFourScenes(six).scenes.length,6,'existing scenes are never truncated');
+ console.log('PASS: original characters/motion/weather, unused library drawings, dialogue, existing scenes and backups survive integrated four-scene additions.');
+
 }finally{await fs.rm(temp,{recursive:true,force:true});}

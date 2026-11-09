@@ -1,17 +1,23 @@
-import {drawingId,emptyDrawingProject,newDrawingScene,type DrawingProject,type DrawingAsset} from './drawing-project';
+import {drawingId,emptyDrawingProject,newDrawingScene,validateDrawingProject,type DrawingProject,type DrawingAsset} from './drawing-project';
 import {rasterImage} from './drawing-media';
 export function emptyFourSceneProject():DrawingProject{
  const scenes=Array.from({length:4},(_,i)=>({...newDrawingScene(`film-scene-${i+1}`,`장면 ${i+1}`),backgroundFit:'contain' as const}));
  return {...emptyDrawingProject(),id:'four-scene-starter',title:'우리의 네 장면 이야기',activeSceneId:scenes[0].id,scenes};
+}
+export function prepareFourScenes(project:DrawingProject):DrawingProject{
+ const scenes=[...project.scenes];
+ while(scenes.length<4)scenes.push(newDrawingScene(drawingId('scene'),`장면 ${scenes.length+1}`));
+ return {...project,scenes};
 }
 export function putScenePicture(project:DrawingProject,sceneId:string,picture:Pick<DrawingAsset,'source'|'width'|'height'>):DrawingProject{
  const scene=project.scenes.find(s=>s.id===sceneId);
  if(!scene)throw new Error('장면을 찾지 못했어요.');
  const id=drawingId('still');
  const asset:DrawingAsset={...picture,id,kind:'background',name:scene.title};
- const scenes=project.scenes.map(s=>s.id===sceneId?{...s,backgroundAssetId:id,stillOriginalAssetId:id,protectedMask:undefined,backgroundFit:'contain' as const,items:[],weather:'none' as const}:s);
- const used=new Set(scenes.flatMap(s=>[s.backgroundAssetId,s.stillOriginalAssetId,...s.items.map(i=>i.assetId)]));
- return {...project,scenes,assets:[...project.assets.filter(a=>used.has(a.id)),asset]};
+  const scenes=project.scenes.map(s=>s.id===sceneId?{...s,backgroundAssetId:id,stillOriginalAssetId:id,protectedMask:undefined,backgroundFit:'contain' as const}:s);
+  const next={...project,scenes,assets:[...project.assets,asset]};
+  if(!validateDrawingProject(next))throw new Error('그림 보관함의 개수 또는 용량 한도에 도달했어요. 기존 작품은 그대로 보관했어요.');
+  return next;
 }
 /** Mask black pixels are copied byte-for-byte from the normalized original. */
 export async function preserveCharacters(original:string,edited:string,mask:string){

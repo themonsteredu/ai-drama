@@ -1,8 +1,9 @@
 'use client';
 import {useEffect,useRef,useState,type PointerEvent} from 'react';
-import {drawingId,type DrawingProject,type DrawingScene} from '@/lib/drawing-project';
+import {drawingId,validateDrawingProject,type DrawingProject,type DrawingScene} from '@/lib/drawing-project';
 import {rasterImage} from '@/lib/drawing-media';
 import {preserveCharacters} from '@/lib/four-scene';
+import './four-scene.css';
 type Props={project:DrawingProject;scene:DrawingScene;onApply:(p:DrawingProject)=>void;onClose:()=>void};
 export function BackgroundEditDialog({project,scene,onApply,onClose}:Props){
  const original=project.assets.find(a=>a.id===(scene.stillOriginalAssetId??scene.backgroundAssetId))!;
@@ -53,8 +54,9 @@ export function BackgroundEditDialog({project,scene,onApply,onClose}:Props){
   const id=result?drawingId('still-result'):scene.backgroundAssetId;
   const scenes=project.scenes.map(s=>s.id===scene.id?{...s,stillOriginalAssetId:original.id,protectedMask:mask.current!.toDataURL('image/png'),backgroundAssetId:id}:s);
   const used=new Set(scenes.flatMap(s=>[s.stillOriginalAssetId,s.backgroundAssetId,...s.items.map(i=>i.assetId)]));
-  const assets=project.assets.filter(a=>used.has(a.id));if(result)assets.push({...original,id:id!,name:`${scene.title} 배경 수정`,source:result});
-  onApply({...project,assets,scenes});onClose();
+  const assets=project.assets.filter(a=>!(result&&a.id===scene.backgroundAssetId&&a.id!==original.id&&a.id.startsWith('still-result-')&&!used.has(a.id)));if(result)assets.push({...original,id:id!,name:`${scene.title} 배경 수정`.slice(0,40),source:result,edit:undefined});
+  const next={...project,assets,scenes};if(!validateDrawingProject(next)){setError('그림 보관함의 개수 또는 용량 한도에 도달했어요. 기존 그림은 그대로 보관했어요.');return;}
+  onApply(next);onClose();
  }
  function restore(){onApply({...project,scenes:project.scenes.map(s=>s.id===scene.id?{...s,backgroundAssetId:original.id}:s)});onClose();}
  return <dialog ref={dialog} className="film-background-dialog" aria-labelledby="background-title" onCancel={e=>{if(busy)e.preventDefault();else onClose();}}><header><div><h2 id="background-title">등장인물은 그대로, 배경만 다듬어요</h2><p>바뀌면 안 되는 인물을 손가락으로 꼼꼼히 칠해 주세요. 빨간 부분은 원본으로 유지돼요.</p></div><button disabled={busy} onClick={onClose}>닫기</button></header>

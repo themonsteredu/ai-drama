@@ -20,7 +20,7 @@ export function GptSettings(){
   finally{lock.current=false;setBusy(false);}
  }
  return <main className="film-app gpt-settings-app">
-  <header className="film-header"><a className="film-brand" href="/film">MOAKIT <b>PLAY</b></a><a className="gpt-back" href="/film">영상 만들기로 돌아가기</a></header>
+  <header className="film-header"><a className="film-brand" href="/draw">MOAKIT <b>PLAY</b></a><a className="gpt-back" href="/draw">PLAY로 돌아가기</a></header>
   <section className="gpt-settings-panel"><p className="film-eyebrow">선생님 설정</p><h1>GPT API 설정</h1><p className="gpt-settings-lead">한 번 저장하면 모든 패드와 노트북에서 함께 사용해요.</p>
    {state===null?<p role="status">연결 상태를 확인하고 있어요.</p>:!state.authenticated?<form onSubmit={e=>{e.preventDefault();void act('login');}}><label htmlFor="settings-pin">설정 번호</label><input id="settings-pin" type="password" inputMode="numeric" autoComplete="off" maxLength={12} value={pin} onChange={e=>setPin(e.target.value)} disabled={busy}/><button className="film-primary" disabled={busy||!pin||state.available===false}>{busy?'확인 중…':'설정 열기'}</button>{state.available===false?<p>설정 저장소를 준비 중이에요.</p>:null}</form>:<>
     <div className="gpt-status"><span>API 키</span><strong>{state.configured?'저장됨':'아직 등록하지 않았어요'}</strong>{state.updatedAt?<small>최근 저장 {new Date(state.updatedAt).toLocaleString('ko-KR')}</small>:null}</div>

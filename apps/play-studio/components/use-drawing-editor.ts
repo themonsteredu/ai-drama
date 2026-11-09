@@ -47,7 +47,7 @@ export function useDrawingEditor(storageKey='active',initialProject=emptyDrawing
     if(asset.kind!=='background'&&scene.items.length>=40){setError('한 장면에는 40개까지 놓을 수 있어요. 장면을 하나 더 만들어 주세요.');return false;}
     const id=drawingId('drawing');const width=bounded(38*asset.width/asset.height,10,26);
     const item:DrawingItem={id,assetId:asset.id,x:50,y:78,width,rotation:0,flipped:false,motion:asset.kind==='plant'?'sway':'still',speed:'normal',speech:''};
-    commit(p=>({...p,assets:isNew?[...p.assets,asset]:p.assets,scenes:p.scenes.map(s=>s.id!==p.activeSceneId?s:asset.kind==='background'?{...s,backgroundAssetId:asset.id}:{...s,items:[...s.items,item]})}));
+    commit(p=>({...p,assets:isNew?[...p.assets,asset]:p.assets,scenes:p.scenes.map(s=>s.id!==p.activeSceneId?s:asset.kind==='background'?{...s,backgroundAssetId:asset.id,...(s.backgroundAssetId!==asset.id?{stillOriginalAssetId:undefined,protectedMask:undefined}:{})}:{...s,items:[...s.items,item]})}));
     setError('');setSelectedId(asset.kind==='background'?undefined:id);setDestination(false);return true;
   }
   function chooseItem(id:string){stop();setSelectedId(id);setDestination(false);}
