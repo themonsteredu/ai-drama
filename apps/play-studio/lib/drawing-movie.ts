@@ -1,6 +1,7 @@
 import type {DrawingProject,DrawingScene} from '../../../packages/stage-core/src/drawing';
 import {drawDrawingScene,DRAW_WIDTH,DRAW_HEIGHT,type RasterCache} from './drawing-renderer';
 import {effectiveMusic,synthMusic} from './drawing-music';
+import {activeNarration,narrationDurations} from './film-narration';
 
 /** A scene lasts as long as its voice, plus a breath. Silent scenes get a readable default. */
 export const SCENE_PAD=.7,SCENE_MIN=2.5,SCENE_SILENT=4,VOICE_LEAD=.25;
@@ -8,9 +9,11 @@ export function sceneSeconds(scene:DrawingScene){
  const minimum=Math.max(SCENE_MIN,scene.voice?scene.voice.duration+VOICE_LEAD:0);
  return Math.max(minimum,scene.durationSeconds??(scene.voice?scene.voice.duration+VOICE_LEAD+SCENE_PAD:SCENE_SILENT));
 }
-export function movieSeconds(project:DrawingProject){
- return project.scenes.reduce((sum,scene)=>sum+sceneSeconds(scene),0);
+export function movieTimeline(project:DrawingProject){
+ const durations=narrationDurations(project);let at=0;
+ return project.scenes.map((scene,index)=>{const seconds=durations?.[index]??sceneSeconds(scene),step={scene,seconds,at};at+=seconds;return step;});
 }
+export function movieSeconds(project:DrawingProject){return movieTimeline(project).reduce((n,s)=>n+s.seconds,0);}
 export function clockLabel(seconds:number){
  const whole=Math.max(0,Math.round(seconds));
  return `${Math.floor(whole/60)}분 ${String(whole%60).padStart(2,'0')}초`;
@@ -124,18 +127,22 @@ export async function recordMovie(project:DrawingProject,images:RasterCache,onPr
   let lostVoices=0;
   const plan:{scene:DrawingScene;at:number;seconds:number;music:ReturnType<typeof musicSource>;voice:AudioBuffer|null}[]=[];
   let at=0;
-  for(const scene of project.scenes){
+  const narration=activeNarration(project);
+  const fullVoice=narration?await decodeQuietly(context,narration.source):null;
+  if(narration&&!fullVoice)throw new Error('전체 녹음을 읽지 못했어요. 녹음을 다시 올려 주세요.');
+  for(const step of movieTimeline(project)){
+   const {scene,seconds}=step;
    const music=musicSource(project,scene);
    if(music&&!cache.has(music.url))cache.set(music.url,await decodeQuietly(context,music.url));
    if(music&&!cache.get(music.url))throw new Error('배경음악을 읽지 못했어요. 음악을 다시 선택해 주세요.');
    let voice:AudioBuffer|null=null;
-   if(scene.voice){
+   if(scene.voice&&!narration){
     if(!cache.has(scene.voice.source))cache.set(scene.voice.source,await decodeQuietly(context,scene.voice.source));
     voice=cache.get(scene.voice.source)??null;
     if(!voice)throw new Error(`${scene.title}의 대사 파일을 읽지 못했어요. 대사가 빠진 영상은 저장하지 않았어요. 녹음 파일을 다시 넣어 주세요.`);
    }
-   plan.push({scene,at,seconds:sceneSeconds(scene),music,voice});
-   at+=sceneSeconds(scene);
+   plan.push({scene,at,seconds,music,voice});
+   at+=seconds;
   }
   if(canceled())throw new Error('영상 만들기를 그만두었어요.');
 
@@ -169,6 +176,7 @@ export async function recordMovie(project:DrawingProject,images:RasterCache,onPr
    const buffer=cache.get(run.music.url);
    if(buffer){sources.push(schedule(context,destination,buffer,base+run.at,run.seconds,run.music.volume,run.music.loop));sources.push(schedule(context,monitor,buffer,base+run.at,run.seconds,run.music.volume,run.music.loop));}
   }
+  if(fullVoice){sources.push(schedule(context,destination,fullVoice,base,total,1,false));sources.push(schedule(context,monitor,fullVoice,base,total,1,false));}
   for(const step of plan){
    if(step.voice){
     sources.push(schedule(context,destination,step.voice,base+step.at+VOICE_LEAD,step.seconds,1,false));

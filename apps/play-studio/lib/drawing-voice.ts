@@ -113,11 +113,13 @@ export async function startVoiceRecording(onTick:(seconds:number)=>void):Promise
 export class VoicePlayer{
  private audio:HTMLAudioElement|null=null;
  private element(){if(!this.audio){this.audio=new Audio();this.audio.dataset.moakitVoice='true';this.audio.preload='auto';}return this.audio;}
- play(voice:DrawingVoice,onError:(message:string)=>void,onEnded?:()=>void){
+ get currentTime(){return this.audio?.currentTime??0;}
+ get paused(){return this.audio?.paused??true;}
+ play(voice:DrawingVoice,onError:(message:string)=>void,onEnded?:()=>void,onStarted?:()=>void){
   const audio=this.element();
   if(audio.dataset.voiceId!==voice.id){audio.pause();audio.dataset.voiceId=voice.id;audio.src=voice.source;}
   audio.currentTime=0;audio.onended=onEnded??null;
-  void audio.play().catch(()=>onError('담은 목소리를 들려주지 못했어요. 화면을 한 번 누르고 다시 해 볼까요?'));
+  void audio.play().then(()=>onStarted?.()).catch(()=>onError('담은 목소리를 들려주지 못했어요. 화면을 한 번 누르고 다시 해 볼까요?'));
  }
  stop(){if(this.audio){this.audio.pause();this.audio.onended=null;try{this.audio.currentTime=0;}catch{}}}
  dispose(){if(this.audio){this.audio.pause();this.audio.onended=null;this.audio.removeAttribute('src');this.audio.load();this.audio=null;}}

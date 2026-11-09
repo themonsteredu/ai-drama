@@ -1,8 +1,9 @@
 import type {DrawingProject} from '../../../packages/stage-core/src/drawing';
 import {validateMusic} from './drawing-music';
 import {validateVoices} from './drawing-voice';
+import {validateNarration} from './film-narration';
 export * from '../../../packages/stage-core/src/drawing';
-export const DRAWING_FILE_LIMIT=64_000_000;
+export const DRAWING_FILE_LIMIT=128_000_000;
 const record=(v:unknown):v is Record<string,unknown>=>!!v&&typeof v==='object'&&!Array.isArray(v);
 const text=(v:unknown,max:number)=>typeof v==='string'&&v.length<=max;
 const num=(v:unknown,min:number,max:number)=>typeof v==='number'&&Number.isFinite(v)&&v>=min&&v<=max;
@@ -28,16 +29,16 @@ function validEdit(v:unknown):boolean{
   return num(c.x,0,w-1)&&num(c.y,0,h-1)&&num(c.width,1,w)&&num(c.height,1,h)&&['x','y','width','height'].every(k=>Number.isInteger(c[k]))&&(c.x as number)+(c.width as number)<=w&&(c.y as number)+(c.height as number)<=h;
 }
 export function validateDrawingProject(v:unknown):v is DrawingProject{
-  if(!record(v)||!validateMusic(v)||!validateVoices(v))return false;
+  if(!record(v)||!validateMusic(v)||!validateVoices(v)||!validateNarration(v.narration))return false;
   if(!record(v)||v.format!=='moakit-drawing'||v.version!==1||!text(v.id,150)||!text(v.title,80)||!text(v.updatedAt,80))return false;
-  if(!Array.isArray(v.assets)||v.assets.length>12||!ids(v.assets))return false;
+  if(!Array.isArray(v.assets)||v.assets.length>32||!ids(v.assets))return false;
   let bytes=0;
   for(const a of v.assets){
     if(!record(a)||!text(a.id,150)||!text(a.name,40)||!one(a.kind,['person','animal','plant','nature','prop','background'])||!num(a.width,1,1600)||!num(a.height,1,1600)||!validRasterSource(a.source))return false;
     bytes+=a.source.length;
     if(a.edit!==undefined){if(!validEdit(a.edit))return false;const e=a.edit as Record<string,unknown>;bytes+=(e.original as string).length+(e.mask as string).length;}
   }
-  if(bytes>24_000_000||!Array.isArray(v.scenes)||!v.scenes.length||v.scenes.length>6||!ids(v.scenes))return false;
+  if(bytes>48_000_000||!Array.isArray(v.scenes)||!v.scenes.length||v.scenes.length>6||!ids(v.scenes))return false;
   const assets=new Set(v.assets.map(a=>a.id));
   if(!v.scenes.some(s=>record(s)&&s.id===v.activeSceneId))return false;
   return v.scenes.every(s=>{
@@ -48,11 +49,11 @@ export function validateDrawingProject(v:unknown):v is DrawingProject{
     if(s.protectedMask!==undefined&&(!validRasterSource(s.protectedMask)||!(s.protectedMask as string).startsWith('data:image/png;')))return false;
     if(!one(s.backgroundFit,['cover','contain'])||!one(s.weather,['none','wind','rain','snow'])||!one(s.wind,['left','right'])||!one(s.strength,['gentle','strong']))return false;
     if(!Array.isArray(s.items)||s.items.length>40||!ids(s.items))return false;
-    return s.items.every(i=>record(i)&&text(i.id,150)&&assets.has(i.assetId)&&num(i.x,0,100)&&num(i.y,0,100)&&num(i.width,5,65)&&num(i.rotation,-180,180)&&typeof i.flipped==='boolean'&&typeof i.speech==='string'&&one(i.motion,['still','move','hop','sway','float','swim','bounce'])&&one(i.speed,['slow','normal','fast'])&&(i.target===undefined||(record(i.target)&&num(i.target.x,0,100)&&num(i.target.y,0,100))));
+    return s.items.every(i=>record(i)&&text(i.id,150)&&assets.has(i.assetId)&&num(i.x,0,100)&&num(i.y,0,100)&&num(i.width,.1,100)&&num(i.rotation,-180,180)&&typeof i.flipped==='boolean'&&typeof i.speech==='string'&&one(i.motion,['still','move','hop','sway','float','swim','bounce'])&&one(i.speed,['slow','normal','fast'])&&(i.target===undefined||(record(i.target)&&num(i.target.x,0,100)&&num(i.target.y,0,100))));
   });
 }
 export function parseDrawingFile(raw:string):DrawingProject{
-  if(new Blob([raw]).size>DRAWING_FILE_LIMIT)throw new Error('작품 파일은 64MB 이하로 골라 주세요.');
+  if(new Blob([raw]).size>DRAWING_FILE_LIMIT)throw new Error('작품 파일은 128MB 이하로 골라 주세요.');
   let v:unknown;try{v=JSON.parse(raw);}catch{throw new Error('작품 파일을 읽지 못했어요. 기존 작품은 그대로예요.');}
   if(!validateDrawingProject(v))throw new Error('내 그림 움직이기 작품 파일이 아니거나 손상됐어요. 기존 작품은 그대로예요.');return v;
 }

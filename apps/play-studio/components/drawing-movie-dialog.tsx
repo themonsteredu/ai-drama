@@ -2,7 +2,8 @@
 import {useEffect,useRef,useState} from 'react';
 import type {DrawingProject} from '@/lib/drawing-project';
 import {loadDrawingImages} from '@/lib/drawing-media';
-import {clockLabel,movieSeconds,movieSupported,recordMovie,sceneSeconds} from '@/lib/drawing-movie';
+import {clockLabel,movieSeconds,movieSupported,recordMovie,movieTimeline} from '@/lib/drawing-movie';
+import {activeNarration} from '@/lib/film-narration';
 import {downloadBlob,fileName} from '@/lib/project-files';
 import './drawing-movie.css';
 
@@ -20,7 +21,7 @@ export function DrawingMovieDialog({project,onPlayStory,onClose}:Props){
   dialog.current?.showModal();
   return()=>{alive.current=false;canceled.current=true;previous?.focus();};
  },[]);
- const total=movieSeconds(project);
+ const total=movieSeconds(project),narration=activeNarration(project);
  const withVoice=project.scenes.filter(s=>s.voice).length;
  function close(){if(busy)return;onClose();}
  async function make(){
@@ -44,13 +45,13 @@ export function DrawingMovieDialog({project,onPlayStory,onClose}:Props){
    <header><div><h2 id="movie-title">🎬 영상 만들기</h2><p>장면이 차례로 넘어가며 음악과 목소리가 함께 나와요.</p></div><button type="button" aria-label="영상 창 닫기" disabled={busy} onClick={close}>×</button></header>
 
    <ul className="movie-scenes" aria-label="장면 차례">
-    {project.scenes.map((scene,index)=><li key={scene.id}>
+    {movieTimeline(project).map(({scene,seconds},index)=><li key={scene.id}>
      <b>{String(index+1).padStart(2,'0')}</b>
      <span>{scene.title}</span>
-     <small>{scene.voice?`목소리 ${Math.max(1,Math.round(scene.voice.duration))}초`:'목소리 없음'} · {Math.round(sceneSeconds(scene))}초</small>
+     <small>{narration?'전체 녹음 이어짐':scene.voice?`목소리 ${Math.max(1,Math.round(scene.voice.duration))}초`:'목소리 없음'} · {Number(seconds.toFixed(1))}초</small>
     </li>)}
    </ul>
-   <p className="movie-total">모두 <b>{clockLabel(total)}</b>짜리 이야기예요. 목소리를 담은 장면은 {withVoice} / {project.scenes.length}개예요.</p>
+   <p className="movie-total">모두 <b>{clockLabel(total)}</b>짜리 이야기예요. {narration?`전체 녹음 하나로 이어져요.${project.narration?.useGenerated?' AI가 만든 목소리예요.':''}`:`목소리를 담은 장면은 ${withVoice} / ${project.scenes.length}개예요.`}</p>
 
    <button type="button" className="movie-watch" disabled={busy} onClick={()=>{onPlayStory();onClose();}}>▶ 처음부터 쭉 보기</button>
 

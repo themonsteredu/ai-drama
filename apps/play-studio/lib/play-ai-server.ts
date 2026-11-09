@@ -40,9 +40,9 @@ async function db(path:string,init:RequestInit={}){
  if(!response.ok)throw new SettingsError('설정을 저장하거나 불러오지 못했어요. 잠시 후 다시 해 주세요.',503);
  return response.status===204?null:response.text().then(v=>v?JSON.parse(v):null);
 }
-export async function limitRequests(request:Request,kind:'login'|'generate'|'settings'){
+export async function limitRequests(request:Request,kind:'login'|'generate'|'settings'|'voice'){
  const ip=(request.headers.get('x-vercel-forwarded-for')||request.headers.get('x-forwarded-for')||'local').split(',')[0].trim();
- const bucket=mac(`${kind}:${ip}`),limit=kind==='login'?8:kind==='generate'?60:20;
+ const bucket=mac(`${kind}:${ip}`),limit=kind==='login'?8:kind==='generate'?60:kind==='voice'?120:20;
  const allowed=await db('rpc/play_film_rate_limit',{method:'POST',headers:{Prefer:'return=representation'},body:JSON.stringify({p_bucket:bucket,p_limit:limit,p_seconds:600})});
  if(allowed!==true)throw new SettingsError('요청이 많아요. 10분 후 다시 시도해 주세요.',429);
 }
@@ -51,9 +51,9 @@ export async function checkPin(request:Request,pin:unknown){
  await limitRequests(request,'login');
  if(typeof pin!=='string'||pin.length>32||!equal(pin,process.env.PLAY_SETTINGS_PIN!))throw new SettingsError('설정 번호가 맞지 않아요.',401);
 }
-export async function authorizeGeneration(request:Request,pin:unknown){
+export async function authorizeGeneration(request:Request,pin:unknown,kind:'generate'|'voice'='generate'){
  if(!authenticated(request))await checkPin(request,pin);
- await limitRequests(request,'generate');
+ await limitRequests(request,kind);
 }
 function encryptionKey(){return Buffer.from(hkdfSync('sha256',serverSecret(),'moakit-play','film-api-key-v1',32));}
 export function encryptKey(value:string){

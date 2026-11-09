@@ -24,12 +24,20 @@ export interface DrawingScene {
   wind: 'left' | 'right'; strength: 'gentle' | 'strong'; caption: string; items: DrawingItem[];
 }
 export interface DrawingProject {
+  narration?: DrawingNarration;
   music?: DrawingMusic | null; musicAssets?: DrawingMusicAsset[];
   format: 'moakit-drawing'; version: 1; id: string; title: string;
   activeSceneId: string; assets: DrawingAsset[]; scenes: DrawingScene[]; updatedAt: string;
 }
 /** One voice the child records in the app, kept with the scene it belongs to. */
 export interface DrawingVoice { id: string; source: string; duration: number; }
+export interface DialogueLine { id:string; sceneId:string; speaker:number; text:string; clip?:DrawingVoice; clipKey?:string; }
+export interface DialogueSpeaker { name:string; voice:string; }
+export interface DrawingNarration {
+ enabled:boolean; original:DrawingVoice; generated?:DrawingVoice; useGenerated:boolean;
+ durations:Record<string,number>; speakers:DialogueSpeaker[]; lines:DialogueLine[];
+ generatedKey?:string; transcript?:string; transcribedParts?:string[];
+}
 export interface DrawingMusic { trackId: string; volume: number; loop: boolean; }
 export interface DrawingMusicAsset { id: string; name: string; source: string; duration: number; }
 export const drawingKinds: {id:DrawingKind;label:string}[] = [
