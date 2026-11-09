@@ -10,27 +10,31 @@ PLAY 브랜치 `preview/play-studio-outputs`에 추가하는 `/film` 화면이�
 - 배경 편집은 인물을 직접 표시한 보호 영역을 제외하고 처리한다. AI 결과에 보호 영역의 정규화된 원본 픽셀을 다시 합성한다. 인물 전체를 표시해야 전체 인물이 보존된다.
 - AI는 정지 배경 1장만 생성한다. 시간 변경·재생·영상 출력은 AI를 다시 호출하지 않는다.
 
-## 배경 AI 연결
+## GPT API 설정과 기기 간 공유
 
-Vercel `ai-drama-yvp7` 프로젝트의 서버 환경변수:
+- `/settings` 메뉴에서 운영자가 지정한 설정 번호로 들어간다. 실제 번호는 서버의 `PLAY_SETTINGS_PIN`에만 둔다.
+- 운영자가 OpenAI API 키를 직접 입력한다. 키 생성 기능이나 브라우저 저장 기능은 없다.
+- 서버가 AES-256-GCM으로 암호화하여 공통 Supabase `play_film_ai_credentials`에 저장한다. 암호화 키는 기존 서버 전용 service-role secret에서 용도를 분리해 HKDF로 유도한다. service-role 키를 교체할 때는 운영자가 OpenAI 키를 다시 저장해야 한다.
+- 모든 기기는 이 공통 설정을 사용한다. API 키·암호문은 설정 응답, 작품 백업, localStorage, IndexedDB에 포함하지 않는다.
+- 설정 번호 검증은 서버에서 처리한다. 30분짜리 HttpOnly 서명 쿠키, 동일 출처 확인, DB 기반 요청 제한을 적용한다.
+- `docs/play-ai-storage.sql`은 서버 전용 저장소와 요청 제한 함수의 설치 SQL이다. 테이블 RLS를 켜고 anon/authenticated 접근을 차단한다. 함수는 SECURITY INVOKER이며 service_role만 실행할 수 있다.
 
-- `FAL_KEY` (또는 `FAL_API_KEY`): fal API 키
-- `TEACHER_ADMIN_CODE`: 생성 시 교사 확인 번호. 브라우저 저장소에 저장하지 않는다.
+## 이미지 편집
 
-환경변수 값을 코드, Git, 문서에 넣지 않는다. 생성 요청은 서버 프록시를 통하고 모델/해상도/장수를 서버가 고정한다. 키가 없으면 생성 버튼이 활성화되지 않는다.
+- fal 호출을 제거하고 OpenAI Images edits를 직접 호출한다.
+- 기본 모델은 `gpt-image-2.5-flare`, quality `low`, 1024×1024, 한 번에 1장, JPEG 출력이다. 모델 접근 권한은 계정마다 다르며 설정의 ‘연결 확인’으로 인증과 모델 조회를 확인한다. 이 확인은 실제 유료 이미지 생성 성공을 보장하지 않는다.
+- 가로·세로 원본을 변형하지 않도록 정사각형에 여백을 추가한 후 생성하고, 같은 영역을 다시 잘라낸다. 흰 편집 영역을 투명 알파로, 검은 인물 보호 영역을 불투명으로 바꿔 OpenAI 마스크로 보낸다. 인물 보호 영역은 결과에 원본 픽셀을 다시 합성한다.
+- 생성 요청에는 그림과 설명만 보낸다. 대사와 음악은 보내지 않는다. 시간·음악 변경과 영상 저장은 추가 이미지 생성 없이 기기에서 처리한다.
+- 연결 오류나 시간 초과 시 유료 생성을 자동 재시도하지 않는다.
+- 비용은 OpenAI의 입력·출력 사용량에 따른다. 이전 fal의 $0.01/MP 요금은 더 이상 적용되지 않는다.
 
-모델: `fal-ai/z-image/turbo/inpaint`. 긴 변 최대 960픽셀, 8 steps, 이미지 1장, 유료 prompt expansion 끔. 2026-11-10 확인 단가는 $0.01/MP이며 실제 청구는 제공자의 과금 규칙과 생성 횟수에 따른다.
-
-API 문서: https://fal.ai/models/fal-ai/z-image/turbo/inpaint/api
+공식 문서: https://developers.openai.com/api/docs/guides/image-generation
+모델: https://developers.openai.com/api/docs/models/gpt-image-2.5-flare
 
 ## 검증
 
-```
-cd apps/play-studio
-pnpm typecheck
-pnpm build
-cd ../..
-node scripts/four-scene-logic-qa.mjs
-```
+`node scripts/four-scene-logic-qa.mjs`
+`node scripts/play-gpt-settings-qa.mjs`
+`cd apps/play-studio && pnpm typecheck && pnpm build`
 
-논리 검사는 32초 녹음 데이터의 파일 왕복, 자동/수동 길이, 대사 잘림 방지, 설정 누락·교사 인증·서명된 생성 상태 조회·비용 제한 요청을 확인한다. 제공자 응답은 모의 처리하며 실제 AI 생성 품질 검증을 대체하지 않는다.
+설정 검증은 가짜 키와 모의 외부 응답으로 인증·암호화·별도 기기 세션·비밀값 비노출·요청 제한·OpenAI 편집 입력을 확인한다. 실제 운영 키는 사용자만 입력하며 유료 생성은 이 작업에서 실행하지 않는다.

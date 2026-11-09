@@ -10,6 +10,7 @@ import {DrawingMusicDialog} from './drawing-music-dialog';
 import {DrawingMovieDialog} from './drawing-movie-dialog';
 import {BackgroundEditDialog} from './background-edit-dialog';
 import './four-scene.css';
+import './gpt-settings.css';
 
 export function FourSceneStudio(){
  const e=useDrawingEditor('four-scene-film',emptyFourSceneProject);
@@ -34,7 +35,7 @@ export function FourSceneStudio(){
   catch(cause){e.setError(cause instanceof Error?cause.message:'작품을 읽지 못했어요.');}
  }
  return <main className="film-app">
-  <header className="film-header"><a className="film-brand" href="/draw">MOAKIT <b>PLAY</b></a><nav aria-label="작품 관리"><button disabled={disabled} onClick={e.backup}>작품 보관</button><button disabled={disabled} onClick={()=>importInput.current?.click()}>불러오기</button><button disabled={disabled} onClick={e.newWork}>새 작품</button></nav></header>
+  <header className="film-header"><a className="film-brand" href="/draw">MOAKIT <b>PLAY</b></a><nav aria-label="작품 관리"><a className="film-navlink" href="/settings">GPT API 설정</a><button disabled={disabled} onClick={e.backup}>작품 보관</button><button disabled={disabled} onClick={()=>importInput.current?.click()}>불러오기</button><button disabled={disabled} onClick={e.newWork}>새 작품</button></nav></header>
   <div className="film-intro"><div><p className="film-eyebrow">우리 그림, 우리 목소리</p><h1>네 장면이 하나의 이야기가 돼요</h1><p>장면마다 그림과 녹음한 대사를 넣어 주세요.</p></div><span className="film-save" role="status">{e.saveState}</span></div>
   <div className="film-title-row"><label>작품 제목<input value={e.project.title} maxLength={80} disabled={disabled} onChange={v=>e.commit(p=>({...p,title:v.target.value}))}/></label><div><button disabled={disabled||!e.canUndo} onClick={e.undo}>되돌리기</button><button disabled={disabled||!e.canRedo} onClick={e.redo}>다시 적용</button></div></div>
   {e.error?<p className="film-alert" role="alert">{e.error}<button aria-label="안내 닫기" onClick={()=>e.setError('')}>닫기</button></p>:null}
