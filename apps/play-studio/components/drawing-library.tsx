@@ -5,8 +5,8 @@ import {readDrawingImage} from '@/lib/drawing-media';
 import {DrawingCutoutEditor} from './drawing-cutout-editor';
 type Pending={asset:DrawingAsset;existing:boolean;revision:number};
 type NameHint={name:string;kind:DrawingKind};
-type Props={assets:DrawingAsset[];disabled:boolean;onPlace:(asset:DrawingAsset,isNew?:boolean)=>boolean;onUpdate:(asset:DrawingAsset)=>boolean;onError:(text:string)=>void;hint?:NameHint|null;onHintUsed?:()=>void};
-export function DrawingLibrary({assets,disabled,onPlace,onUpdate,onError,hint,onHintUsed}:Props){
+type Props={assets:DrawingAsset[];disabled:boolean;onPlace:(asset:DrawingAsset,isNew?:boolean)=>boolean;onUpdate:(asset:DrawingAsset)=>boolean;onRemove:(assetId:string)=>void;onError:(text:string)=>void;hint?:NameHint|null;onHintUsed?:()=>void};
+export function DrawingLibrary({assets,disabled,onPlace,onUpdate,onRemove,onError,hint,onHintUsed}:Props){
   const picker=useRef<HTMLInputElement>(null),camera=useRef<HTMLInputElement>(null),sequence=useRef(0);
   const [pending,setPending]=useState<Pending|null>(null),[busy,setBusy]=useState(false);
   useEffect(()=>()=>{sequence.current++;},[]);
@@ -29,7 +29,7 @@ export function DrawingLibrary({assets,disabled,onPlace,onUpdate,onError,hint,on
     <p className="draw-help">종이 그림도, 태블릿 그림도 좋아요.<br/>JPG · PNG · WebP / 10MB 이하</p>
     <button type="button" className="story-sample" disabled={disabled||busy||assets.length>=32} onClick={()=>void sample()}><img src="/play-scenes/dinosaur-photo.webp" alt="공룡 예시 사진"/><span><strong>공룡 사진으로 연습하기</strong><small>내 그림이 없어도 먼저 해 봐요 →</small></span></button>
     {pending?<DrawingCutoutEditor key={pending.revision} source={pending.asset.source} initialName={pending.asset.name} initialKind={pending.asset.kind} edit={pending.asset.edit} existing={pending.existing} onCancel={()=>setPending(null)} onDone={(result,name,kind)=>{if(disabled)return false;const asset:DrawingAsset={...pending.asset,...result,name,kind};const ok=pending.existing?onUpdate(asset):onPlace(asset,true);if(ok)setPending(null);return ok;}}/>:null}
-    <div className="draw-library-title"><strong>내 그림 보관함</strong><small>{assets.length}/32</small></div><div className="draw-asset-grid">{assets.map(a=><div key={a.id} className="cutout-asset-wrap"><button type="button" disabled={disabled} className="draw-asset" onClick={()=>onPlace(a)} aria-label={`${a.name} 다시 놓기`}><span className="draw-checker"><img src={a.source} alt=""/></span><strong>{a.name}</strong><small>{drawingKinds.find(k=>k.id===a.kind)?.label}</small></button><button type="button" className="cutout-reedit" disabled={disabled||busy} aria-label={`${a.name} 다듬기`} onClick={()=>setPending({asset:a,existing:true,revision:++sequence.current})}>다시 다듬기</button></div>)}</div>
+    <div className="draw-library-title"><strong>내 그림 보관함</strong><small>{assets.length}/32</small></div><div className="draw-asset-grid">{assets.map(a=><div key={a.id} className="cutout-asset-wrap"><button type="button" disabled={disabled} className="draw-asset" onClick={()=>onPlace(a)} aria-label={`${a.name} 다시 놓기`}><span className="draw-checker"><img src={a.source} alt=""/></span><strong>{a.name}</strong><small>{drawingKinds.find(k=>k.id===a.kind)?.label}</small></button><button type="button" className="cutout-reedit" disabled={disabled||busy} aria-label={`${a.name} 다듬기`} onClick={()=>setPending({asset:a,existing:true,revision:++sequence.current})}>다시 다듬기</button><button type="button" className="draw-delete-asset" disabled={disabled||busy} aria-label={`${a.name} 보관함에서 삭제`} onClick={()=>onRemove(a.id)}>그림 삭제</button></div>)}</div>
     {!assets.length?<p className="draw-empty-help">내가 그린 친구들이 여기에 모여요.</p>:null}
     <p className="draw-privacy">사진은 이 기기에서만 다듬어요.<br/>자동 정리 도구만 처음에 내려받아요.</p>
   </aside>;

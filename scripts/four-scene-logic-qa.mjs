@@ -31,5 +31,15 @@ try{
  assert(extended.assets.some(a=>a.id===spare.id),'unused library drawings survive');assert.deepEqual(extended.scenes[0].items,legacy.scenes[0].items,'character motions survive');assert.equal(extended.scenes[0].weather,'wind');assert.equal(extended.scenes[0].voice.duration,32);assert(validateDrawingProject(extended));
  const six={...extended,scenes:[...extended.scenes,{...extended.scenes[1],id:'fifth'},{...extended.scenes[1],id:'sixth'}]};assert.equal(prepareFourScenes(six).scenes.length,6,'existing scenes are never truncated');
  console.log('PASS: original characters/motion/weather, unused library drawings, dialogue, existing scenes and backups survive integrated four-scene additions.');
+ const {removeDrawingAsset,removeSceneBackground}=local('./apps/play-studio/lib/drawing-removal.js');
+ const resultAsset={...character,id:'generated-background',kind:'background'},original={...character,id:'original-background',kind:'background'};
+ const withShared={...extended,assets:[...extended.assets,resultAsset,original],scenes:extended.scenes.map((scene,i)=>({...scene,backgroundAssetId:i===0?resultAsset.id:scene.backgroundAssetId,stillOriginalAssetId:i===0?original.id:scene.stillOriginalAssetId,protectedMask:i===0?raster:scene.protectedMask,items:[...scene.items,{...legacy.scenes[0].items[0],id:'shared-'+i}]}))};
+ const before=JSON.stringify(withShared),removed=removeDrawingAsset(withShared,character.id);
+ assert(validateDrawingProject(removed));assert(!removed.assets.some(a=>a.id===character.id));assert(removed.scenes.every(s=>s.items.every(i=>i.assetId!==character.id)));assert.deepEqual(removed.scenes.map(s=>s.voice),withShared.scenes.map(s=>s.voice));assert.equal(JSON.stringify(withShared),before,'deletion never mutates undo snapshot');
+ const deletedOriginal=removeDrawingAsset(withShared,original.id);assert(validateDrawingProject(deletedOriginal));assert.equal(deletedOriginal.scenes[0].backgroundAssetId,resultAsset.id);assert.equal(deletedOriginal.scenes[0].stillOriginalAssetId,undefined);assert.equal(deletedOriginal.scenes[0].protectedMask,undefined);
+ const deletedBackground=removeDrawingAsset(withShared,resultAsset.id);assert(validateDrawingProject(deletedBackground));assert.equal(deletedBackground.scenes[0].backgroundAssetId,undefined);assert.equal(deletedBackground.scenes[0].stillOriginalAssetId,undefined);assert(deletedBackground.assets.some(a=>a.id===original.id));
+ const detached=removeSceneBackground(withShared,withShared.scenes[0].id);assert(validateDrawingProject(detached));assert.deepEqual(detached.assets,withShared.assets);assert.deepEqual(detached.scenes[0].items,withShared.scenes[0].items);assert.equal(detached.scenes[0].backgroundAssetId,undefined);assert.deepEqual(detached.scenes.slice(1),withShared.scenes.slice(1));assert.equal(removeDrawingAsset(withShared,'missing'),withShared);assert.equal(JSON.stringify(parseDrawingFile(before)),before);
+ console.log('PASS: shared picture deletion, AI original/result references, scene-only background removal and complete immutable undo snapshot.');
+
 
 }finally{await fs.rm(temp,{recursive:true,force:true});}

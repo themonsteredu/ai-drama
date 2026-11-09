@@ -1,3 +1,4 @@
+import {backgroundEditPrompt} from '../../../lib/background-prompt';
 import {authenticated,authorizeGeneration,failure,IMAGE_MODEL,keyStatus,readBody,ready,reply,sameOrigin,savedApiKey,sessionCookie,SettingsError} from '../../../lib/play-ai-server';
 export const runtime='nodejs';
 export const maxDuration=300;
@@ -22,7 +23,7 @@ export async function POST(request:Request){
   form.set('model',IMAGE_MODEL);form.set('quality','low');form.set('size','1024x1024');form.set('n','1');form.set('output_format','jpeg');form.set('output_compression','85');
   form.set('image[]',new Blob([new Uint8Array(image.bytes)],{type:'image/png'}),'scene.png');
   form.set('mask',new Blob([new Uint8Array(mask.bytes)],{type:'image/png'}),'mask.png');
-  form.set('prompt',body.operation==='remove-character'?`Remove ONLY the selected character inside the transparent mask. Reconstruct the hidden background naturally in the same handmade drawing style. No person, creature, silhouette, shadow or duplicate may remain in the selected region. Keep all unmasked pixels, other characters, composition and letterboxing unchanged. Context: ${body.prompt.trim()}`:`Gently refine ONLY the transparent-mask background inside this child's illustration. Preserve its handmade drawing style, original composition, subject positions and perspective exactly. Keep opaque protected characters and outer letterboxing unchanged. Do not add people, animals, text or logos. Background: ${body.prompt.trim()}`);
+  form.set('prompt',backgroundEditPrompt(body.prompt,body.operation,body.strength==='gentle'?'gentle':'clear'));
   const response=await fetch('https://api.openai.com/v1/images/edits',{method:'POST',headers:{Authorization:`Bearer ${key}`},body:form,cache:'no-store',redirect:'error',signal:AbortSignal.timeout(270000)});
   if(!response.ok)throw new SettingsError(response.status===401?'GPT API 키 인증에 실패했어요. 설정에서 키를 확인해 주세요.':response.status===429?'API 잔액 또는 요청 한도를 확인해 주세요. 자동으로 다시 생성하지 않았어요.':`배경 생성에 실패했어요 (${response.status}). 키의 이미지 생성 권한과 입력 내용을 확인해 주세요.`,400);
   const data=await response.json(),value=data.data?.[0]?.b64_json;

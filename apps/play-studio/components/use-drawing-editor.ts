@@ -9,6 +9,7 @@ import {loadDrawing,saveDrawing} from '@/lib/drawing-storage';
 import {loadDrawingImages} from '@/lib/drawing-media';
 import {drawDrawingScene,hitDrawing} from '@/lib/drawing-renderer';
 import {downloadBlob,fileName} from '@/lib/project-files';
+import {removeDrawingAsset,removeSceneBackground} from '@/lib/drawing-removal';
 
 function safeItemPoint(item:DrawingItem,asset:DrawingAsset,pos:{x:number;y:number}){
   const height=item.width*(1280/720)*(asset.height/asset.width);
@@ -38,7 +39,7 @@ export function useDrawingEditor(storageKey='active',initialProject=emptyDrawing
   function endStory(){storyOn.current=false;storyEpoch.current++;clearTimeout(storyTimer.current);voicePlayer.current?.stop();setVoicePlaying(false);setStoryPlaying(false);}
   function stop(){endStory();musicPlayer.current?.stop();setPlaying(false);clock.current=0;setReset(n=>n+1);}
   function setValue(p:DrawingProject){projectRef.current=p;setProject(p);}
-  function commit(fn:(p:DrawingProject)=>DrawingProject){if(!loaded)return;const before=projectRef.current;const next={...fn(before),updatedAt:new Date().toISOString()};past.current=[...past.current.slice(-29),before];future.current=[];stop();setValue(next);}
+  function commit(fn:(p:DrawingProject)=>DrawingProject){if(!loaded)return;const before=projectRef.current,candidate=fn(before);if(candidate===before)return;const next={...candidate,updatedAt:new Date().toISOString()};past.current=[...past.current.slice(-29),before];future.current=[];stop();setValue(next);}
   function editScene(patch:Partial<DrawingScene>){commit(p=>({...p,scenes:p.scenes.map(s=>s.id===p.activeSceneId?{...s,...patch}:s)}));}
   function patchItem(patch:Partial<DrawingItem>){if(!selected)return;editScene({items:scene.items.map(i=>i.id===selected.id?{...i,...patch}:i)});}
   function undo(){const p=past.current.pop();if(!p)return;future.current.unshift(projectRef.current);stop();setValue(p);setSelectedId(undefined);setDestination(false);}
@@ -53,6 +54,13 @@ export function useDrawingEditor(storageKey='active',initialProject=emptyDrawing
   }
   function chooseItem(id:string){stop();setSelectedId(id);setDestination(false);}
   function remove(){if(!selected)return;editScene({items:scene.items.filter(i=>i.id!==selected.id)});setSelectedId(undefined);}
+  function removeAsset(assetId:string){
+    const p=projectRef.current,asset=p.assets.find(a=>a.id===assetId);if(!asset)return;
+    const used=p.scenes.filter(s=>s.backgroundAssetId===assetId||s.stillOriginalAssetId===assetId||s.items.some(i=>i.assetId===assetId)).length;
+    if(!confirm(`“${asset.name}” 그림을 보관함에서 삭제할까요?${used?` 사용 중인 ${used}개 장면에서도 빠져요.`:''} 실행 취소로 되돌릴 수 있어요.`))return;
+    commit(value=>removeDrawingAsset(value,assetId));setSelectedId(undefined);setDestination(false);setError('');
+  }
+  function removeBackground(){commit(p=>removeSceneBackground(p,p.activeSceneId));setSelectedId(undefined);setDestination(false);}
   function duplicate(){if(!selected||scene.items.length>=40)return;const id=drawingId('drawing');editScene({items:[...scene.items,{...selected,id,x:bounded(selected.x+5,5,95),target:selected.target?{...selected.target}:undefined}]});setSelectedId(id);}
   function layer(delta:-1|1){if(!selected)return;const items=[...scene.items],index=items.findIndex(i=>i.id===selected.id),to=bounded(index+delta,0,items.length-1);const [item]=items.splice(index,1);items.splice(to,0,item);editScene({items});}
   function addScene(copy=false){if(project.scenes.length>=6)return;const id=drawingId('scene');const next=copy?{...structuredClone(scene),id,title:`장면 ${project.scenes.length+1}`,items:scene.items.map(i=>({...i,id:drawingId('drawing')}))}:newDrawingScene(id,`장면 ${project.scenes.length+1}`);commit(p=>({...p,activeSceneId:id,scenes:[...p.scenes,next]}));setSelectedId(undefined);setDestination(false);}
@@ -132,5 +140,5 @@ export function useDrawingEditor(storageKey='active',initialProject=emptyDrawing
   }
   async function png(){setBusy(true);try{const snapshot=projectRef.current,current=snapshot.scenes.find(s=>s.id===snapshot.activeSceneId)!;const images=await loadDrawingImages(snapshot.assets);await document.fonts.ready;const c=document.createElement('canvas');c.width=2560;c.height=1440;const ctx=c.getContext('2d');if(!ctx)throw new Error('이미지를 만들지 못했어요.');ctx.scale(2,2);drawDrawingScene(ctx,snapshot,current,images,clock.current);const blob=await new Promise<Blob>((resolve,reject)=>c.toBlob(b=>b?resolve(b):reject(new Error('저장에 실패했어요.')),'image/png'));downloadBlob(blob,`${fileName(snapshot.title)}-${fileName(current.title)}.png`);}catch(cause){setError(cause instanceof Error?cause.message:'이미지를 만들지 못했어요.');}finally{setBusy(false);}}
   return {recording,recordSeconds,startVoice,finishVoice,playVoice,stopVoice,removeVoice,voicePlaying,storyPlaying,playStory,maxVoiceSeconds:VOICE_MAX_SECONDS,
-    project,scene,selected,selectedAsset,selectedId,playing,start,pause,reset,clock,destination,setDestination,loaded,blocked,saveState,error,setError,busy,commit,stop,editScene,patchItem,undo,redo,canUndo:past.current.length>0,canRedo:future.current.length>0,place,chooseItem,remove,duplicate,layer,addScene,switchScene,deleteScene,newWork,down,move,up,cancel,importWork,backup,png};
+    project,scene,selected,selectedAsset,selectedId,playing,start,pause,reset,clock,destination,setDestination,loaded,blocked,saveState,error,setError,busy,commit,stop,editScene,patchItem,undo,redo,canUndo:past.current.length>0,canRedo:future.current.length>0,place,chooseItem,remove,removeAsset,removeBackground,duplicate,layer,addScene,switchScene,deleteScene,newWork,down,move,up,cancel,importWork,backup,png};
 }
