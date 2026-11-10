@@ -46,9 +46,15 @@ try{
  assert.equal((await images.POST(req({image:jpegSource,mask:source,prompt:'사진 속 배경'},otherCookie))).status,200);assert.equal(lastImageMime,'image/jpeg');
  const beforeInvalid=providerCalls;assert.equal((await images.POST(req({image:jpegSource,mask:jpegSource,prompt:'사진 속 배경'},otherCookie))).status,400);assert.equal(providerCalls,beforeInvalid,'masks still require PNG');
  const wrongSize=Buffer.from(jpg);wrongSize.writeUInt16BE(512,27);assert.equal((await images.POST(req({image:'data:image/jpeg;base64,'+wrongSize.toString('base64'),mask:source,prompt:'배경'},otherCookie))).status,400);assert.equal(providerCalls,beforeInvalid);
- assert.match(lastImagePrompt,/clearly visible transformation/);assert.match(lastImagePrompt,/Never redraw a protected character/);assert.match(lastImagePrompt,/SAME CHILD using the SAME TOOLS/);assert.match(lastImagePrompt,/Change background CONTENT, never the artist's style/);assert.match(lastImagePrompt,/Do not improve the drawing skill/);assert(!lastImagePrompt.includes('original composition'));
- assert.equal((await images.POST(req({image:source,mask:source,prompt:'숲 배경',strength:'gentle'},otherCookie))).status,200);assert.match(lastImagePrompt,/Gently enrich/);assert.match(lastImagePrompt,/SAME CHILD using the SAME TOOLS/);
- assert.equal((await images.POST(req({image:source,mask:source,prompt:'주인공 뒤의 숲',strength:'clear',operation:'remove-character'},otherCookie))).status,200);assert.match(lastImagePrompt,/Remove ONLY the selected character/);assert.match(lastImagePrompt,/SAME CHILD using the SAME TOOLS/);assert(!lastImagePrompt.includes('clearly visible transformation'));
+ assert.match(lastImagePrompt,/clearly visible improvement in the artistic finish/);assert.match(lastImagePrompt,/Never redraw a protected character/);
+ const assertRefinement=()=>{assert.match(lastImagePrompt,/Keep the existing background elements and composition/);assert.match(lastImagePrompt,/type, count, position, relative size/);assert.match(lastImagePrompt,/Do not add, remove, duplicate, replace or rearrange/);assert.match(lastImagePrompt,/more beautifully and skillfully drawn/);assert(!lastImagePrompt.includes('Do not improve the drawing skill'));assert(!lastImagePrompt.includes('scenery additions'));};
+ assertRefinement();
+ const {backgroundPresets}=load('./lib/background-prompt.js');
+ for(const preset of backgroundPresets)for(const strength of ['gentle','clear']){
+  assert(preset.prompt.length<=600);assert.equal((await images.POST(req({image:source,mask:source,prompt:preset.prompt,strength},otherCookie))).status,200);assertRefinement();assert.match(lastImagePrompt,strength==='gentle'?/Gently refine/:/clearly visible improvement in the artistic finish/);
+ }
+ assert.equal((await images.POST(req({image:source,mask:source,prompt:'주인공 뒤의 숲',strength:'clear',operation:'remove-character'},otherCookie))).status,200);assert.match(lastImagePrompt,/Remove ONLY the selected character/);assert.match(lastImagePrompt,/continuing the surrounding lines, colors and textures/);assert.match(lastImagePrompt,/Do not introduce new scenery objects/);assert(!lastImagePrompt.includes('clearly visible improvement'));
+ console.log('PASS: all background presets/strengths improve existing objects without scene additions; character removal only continues surrounding background.');
 
  const before=providerCalls;limited=true;assert.equal((await settings.POST(req({action:'login',pin:'3035'}))).status,429);assert.equal((await images.POST(req({image:source,mask:source,prompt:'숲'},otherCookie))).status,429);assert.equal(providerCalls,before);limited=false;
  providerStatus=401;const failed=await settings.POST(req({action:'test'},cookie));assert.equal(failed.status,400);assert(!(await failed.text()).includes('never expose'));
