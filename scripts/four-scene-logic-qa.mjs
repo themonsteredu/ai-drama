@@ -49,6 +49,12 @@ try{
  const turned=applyRotatedBackground(sharedBackground,sharedBackground.scenes[0].id,rotationMap,raster);assert(validateDrawingProject(turned));assert.notEqual(turned.scenes[0].backgroundAssetId,resultAsset.id);assert.equal(turned.scenes[1].backgroundAssetId,resultAsset.id);assert.deepEqual(turned.assets.find(a=>a.id===resultAsset.id),resultAsset);assert.equal(turned.scenes[0].protectedMask,raster);assert.deepEqual(turned.scenes[0].items,sharedBackground.scenes[0].items);assert.deepEqual(turned.scenes[0].voice,sharedBackground.scenes[0].voice);
  assert.equal(turned.assets.length,sharedBackground.assets.length+1,'only assets shared with other scenes are copied');
  console.log('PASS: portrait rotation, inverse/four-turn RGBA equality, shared-background isolation, rotated mask references and unchanged dialogue.');
+ const {PNG}=require('pngjs'),largePng=new PNG({width:1280,height:960});let seed=17;
+ for(let i=0;i<largePng.data.length;i+=4){for(let c=0;c<3;c++){seed=(Math.imul(seed,1664525)+1013904223)>>>0;largePng.data[i+c]=seed>>>24;}largePng.data[i+3]=255;}
+ const largeRaster='data:image/png;base64,'+PNG.sync.write(largePng).toString('base64');assert(largeRaster.length>4_000_000,'regression fixture must exceed the old result limit');
+ const largeProject=putScenePicture(emptyFourSceneProject(),'film-scene-1',{source:largeRaster,width:1280,height:960});assert(validateDrawingProject(largeProject));assert.equal(parseDrawingFile(JSON.stringify(largeProject)).assets[0].source,largeRaster);
+ console.log('PASS: detailed lossless PNG above 4 MB saves and round-trips without resizing or pixel loss ('+largeRaster.length+' characters).');
+
 
 
 

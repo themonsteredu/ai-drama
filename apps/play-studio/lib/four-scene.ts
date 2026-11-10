@@ -1,4 +1,4 @@
-import {drawingId,emptyDrawingProject,newDrawingScene,validateDrawingProject,type DrawingProject,type DrawingAsset} from './drawing-project';
+import {drawingId,emptyDrawingProject,newDrawingScene,validateDrawingProject,DRAWING_RASTER_LIMIT,type DrawingProject,type DrawingAsset} from './drawing-project';
 import {rasterImage} from './drawing-media';
 export function emptyFourSceneProject():DrawingProject{
  const scenes=Array.from({length:4},(_,i)=>({...newDrawingScene(`film-scene-${i+1}`,`장면 ${i+1}`),backgroundFit:'contain' as const}));
@@ -30,6 +30,6 @@ export async function preserveCharacters(original:string,edited:string,mask:stri
  for(let i=0;i<result.data.length;i+=4)if(protection.data[i]<128)result.data.set(first.data.subarray(i,i+4),i);
  ctx.putImageData(result,0,0);
  const source=c.toDataURL('image/png');
- if(source.length>4_000_000)throw new Error('결과 그림이 너무 커요. 더 작은 원본 그림으로 다시 해 주세요. 원본은 그대로예요.');
+ if(source.length>DRAWING_RASTER_LIMIT)throw new Error('결과 그림의 저장 한도를 넘었어요. 원본은 그대로 보관돼요.');
  return {source,width:c.width,height:c.height};
 }

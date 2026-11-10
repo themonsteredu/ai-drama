@@ -4,13 +4,16 @@ import {validateVoices} from './drawing-voice';
 import {validateNarration} from './film-narration';
 export * from '../../../packages/stage-core/src/drawing';
 export const DRAWING_FILE_LIMIT=128_000_000;
+// A lossless 1600×1600 RGBA PNG can exceed 4 MB after base64 encoding.
+// Keep generated/rotated originals lossless while retaining the total project budget.
+export const DRAWING_RASTER_LIMIT=16_000_000;
 const record=(v:unknown):v is Record<string,unknown>=>!!v&&typeof v==='object'&&!Array.isArray(v);
 const text=(v:unknown,max:number)=>typeof v==='string'&&v.length<=max;
 const num=(v:unknown,min:number,max:number)=>typeof v==='number'&&Number.isFinite(v)&&v>=min&&v<=max;
 const one=(v:unknown,choices:string[])=>typeof v==='string'&&choices.includes(v);
 const ids=(v:unknown[])=>v.every(x=>record(x)&&typeof x.id==='string'&&x.id.length>0)&&new Set(v.map(x=>(x as Record<string,unknown>).id)).size===v.length;
 export function validRasterSource(v:unknown):v is string{
-  if(typeof v!=='string'||v.length>4_000_000||!/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(v))return false;
+  if(typeof v!=='string'||v.length>DRAWING_RASTER_LIMIT||!/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(v))return false;
   try{
     const [header,payload]=v.split(',');const b=atob(payload.slice(0,48));
     if(header.includes('png')){
