@@ -14,7 +14,7 @@ import {rotateSceneBackground} from '@/lib/drawing-rotation';
 
 function safeItemPoint(item:DrawingItem,asset:DrawingAsset,pos:{x:number;y:number}){
   const height=item.width*(1280/720)*(asset.height/asset.width);
-  const accentUp=item.motion==='hop'?7:item.motion==='bounce'?4:item.motion==='float'?2.5:0;
+  const accentUp=item.motion==='hop'?7+height*.06:item.motion==='bounce'?4:item.motion==='float'?2.5:item.motion==='run'?2:item.motion==='walk'?1:item.motion==='dance'?height*.05:0;
   const accentDown=item.motion==='float'?2.5:0;
   const side=bounded(item.width/2+1,2,49);
   const top=bounded(height+accentUp+1,5,96-accentDown);

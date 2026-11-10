@@ -7,7 +7,7 @@ import {sceneSeconds,VOICE_LEAD} from '@/lib/drawing-movie';
 import {BackgroundEditDialog} from './background-edit-dialog';
 import './drawing-film-tools.css';
 
-export function DrawingFilmTools({e}:{e:ReturnType<typeof useDrawingEditor>}){
+export function DrawingFilmTools({e,onCharacterSelected}:{e:ReturnType<typeof useDrawingEditor>;onCharacterSelected?:()=>void}){
  const [editing,setEditing]=useState<'background'|'separate'|null>(null),[uploading,setUploading]=useState(false),[draft,setDraft]=useState('');
  const file=useRef<HTMLInputElement>(null),camera=useRef<HTMLInputElement>(null),lock=useRef(false);
  const disabled=!e.loaded||e.busy||e.playing||e.recording||uploading;
@@ -26,6 +26,6 @@ export function DrawingFilmTools({e}:{e:ReturnType<typeof useDrawingEditor>}){
   {scene.backgroundAssetId?<><div className="draw-scene-rotation" aria-label="장면 그림 방향"><strong>그림 방향</strong><button disabled={disabled} onClick={()=>void e.rotateScene(-1)}>왼쪽 90° 회전</button><button disabled={disabled} onClick={()=>void e.rotateScene(1)}>오른쪽 90° 회전</button><button disabled={disabled} onClick={e.removeBackground}>장면 그림 빼기</button></div><div className="draw-film-buttons"><button disabled={disabled} onClick={()=>setEditing('background')}>배경만 AI로 다듬기</button><button disabled={disabled} onClick={()=>setEditing('separate')}>주인공만 따로 움직이기</button></div></>:null}
 
   {!e.project.narration?.enabled?<details><summary>장면 길이 · {Math.ceil(sceneSeconds(scene))}초</summary><label className="draw-film-auto"><input type="checkbox" checked={scene.durationSeconds===undefined} disabled={disabled} onChange={event=>e.editScene({durationSeconds:event.target.checked?undefined:Math.ceil(sceneSeconds(scene))})}/>대사 길이에 자동으로 맞추기</label><label className="draw-film-duration">장면 길이 <input aria-label="장면 길이 초" type="number" min={min} max={600} value={draft} disabled={disabled||scene.durationSeconds===undefined} onChange={event=>setDraft(event.target.value)} onBlur={()=>{if(scene.durationSeconds===undefined)return;const value=Math.min(600,Math.max(min,Number(draft)||min));e.editScene({durationSeconds:value});setDraft(String(value));}}/> 초</label><p>대사가 잘리지 않도록 최소 {min}초로 맞춰요.</p></details>:null}
-  {editing&&scene.backgroundAssetId?<BackgroundEditDialog mode={editing} onSelect={e.chooseItem} project={e.project} scene={scene} onApply={p=>e.commit(()=>p)} onClose={()=>setEditing(null)}/>:null}
+  {editing&&scene.backgroundAssetId?<BackgroundEditDialog mode={editing} onSelect={id=>{e.chooseItem(id);onCharacterSelected?.();}} project={e.project} scene={scene} onApply={p=>e.commit(()=>p)} onClose={()=>setEditing(null)}/>:null}
  </section>;
 }

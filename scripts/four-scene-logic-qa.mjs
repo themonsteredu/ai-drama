@@ -31,6 +31,29 @@ try{
  assert(extended.assets.some(a=>a.id===spare.id),'unused library drawings survive');assert.deepEqual(extended.scenes[0].items,legacy.scenes[0].items,'character motions survive');assert.equal(extended.scenes[0].weather,'wind');assert.equal(extended.scenes[0].voice.duration,32);assert(validateDrawingProject(extended));
  const six={...extended,scenes:[...extended.scenes,{...extended.scenes[1],id:'fifth'},{...extended.scenes[1],id:'sixth'}]};assert.equal(prepareFourScenes(six).scenes.length,6,'existing scenes are never truncated');
  console.log('PASS: original characters/motion/weather, unused library drawings, dialogue, existing scenes and backups survive integrated four-scene additions.');
+ const {drawingFrame,drawingMotions,motionsFor}=local('./packages/stage-core/src/drawing.js');
+ const {actionPose,gaitPoint}=local('./apps/play-studio/lib/drawing-actions.js');
+ for(const motion of drawingMotions.map(m=>m.id)){
+  const actor={...legacy.scenes[0].items[0],motion,speed:'normal',target:{x:80,y:75}};
+  const project={...legacy,scenes:[{...legacy.scenes[0],items:[actor]}]};
+  assert(validateDrawingProject(project));assert.equal(parseDrawingFile(JSON.stringify(project)).scenes[0].items[0].motion,motion);
+  if(motion!=='still'){const end=drawingFrame(actor,30);assert.equal(end.x,80);assert.equal(end.y,75);assert.equal(end.angle,actor.rotation);assert.deepEqual(actionPose(actor,end.phase,end.progress),{gait:0,scaleX:1,scaleY:1});}
+ }
+ for(const motion of ['walk','run','dance'])assert(motionsFor('person').includes(motion));
+ const baseActor=legacy.scenes[0].items[0];
+ for(const running of [false,true])for(const gait of [-1,-.5,0,.5,1]){
+  for(const u of [0,.25,.5,.75,1])assert.deepEqual(gaitPoint(u,.5,gait,running),{x:u,y:.5},'upper body stays intact at the join');
+  for(let row=0;row<6;row++)for(let col=0;col<4;col++){
+   const points=[[col/4,.5+row/12],[(col+1)/4,.5+row/12],[(col+1)/4,.5+(row+1)/12],[col/4,.5+(row+1)/12]].map(([u,v])=>gaitPoint(u,v,gait,running));
+   for(const [a,b,c] of [[0,1,2],[0,2,3]]){const p=points[a],q=points[b],r=points[c];assert((q.x-p.x)*(r.y-p.y)-(q.y-p.y)*(r.x-p.x)>0,'no mesh fold or inverted drawing pieces');}
+  }
+ }
+ assert(gaitPoint(.25,1,-1).y<gaitPoint(.75,1,-1).y);assert(gaitPoint(.75,1,1).y<gaitPoint(.25,1,1).y,'feet alternate');
+ assert.deepEqual(actionPose({...baseActor,motion:'run'},0,0),{gait:0,scaleX:1,scaleY:1},'paused drawing keeps original shape');
+ const walking={...baseActor,speed:'normal',motion:'walk',target:{x:80,y:75}},running={...walking,motion:'run'};
+ assert(drawingFrame(running,2).progress>drawingFrame(walking,2).progress,'running also travels faster');
+ assert.notEqual(actionPose({...baseActor,motion:'dance',target:undefined},.5,0).scaleY,1,'dance changes the pose in place');
+ console.log('PASS: old/new motion backups, alternating feet, continuous non-folding deformation, neutral start/end poses, faster running and looping dance.');
  const {removeDrawingAsset,removeSceneBackground}=local('./apps/play-studio/lib/drawing-removal.js');
  const resultAsset={...character,id:'generated-background',kind:'background'},original={...character,id:'original-background',kind:'background'};
  const withShared={...extended,assets:[...extended.assets,resultAsset,original],scenes:extended.scenes.map((scene,i)=>({...scene,backgroundAssetId:i===0?resultAsset.id:scene.backgroundAssetId,stillOriginalAssetId:i===0?original.id:scene.stillOriginalAssetId,protectedMask:i===0?raster:scene.protectedMask,items:[...scene.items,{...legacy.scenes[0].items[0],id:'shared-'+i}]}))};

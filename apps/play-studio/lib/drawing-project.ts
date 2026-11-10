@@ -1,4 +1,4 @@
-import type {DrawingProject} from '../../../packages/stage-core/src/drawing';
+import {drawingMotions,type DrawingProject} from '../../../packages/stage-core/src/drawing';
 import {validateMusic} from './drawing-music';
 import {validateVoices} from './drawing-voice';
 import {validateNarration} from './film-narration';
@@ -52,7 +52,7 @@ export function validateDrawingProject(v:unknown):v is DrawingProject{
     if(s.protectedMask!==undefined&&(!validRasterSource(s.protectedMask)||!(s.protectedMask as string).startsWith('data:image/png;')))return false;
     if(!one(s.backgroundFit,['cover','contain'])||!one(s.weather,['none','wind','rain','snow'])||!one(s.wind,['left','right'])||!one(s.strength,['gentle','strong']))return false;
     if(!Array.isArray(s.items)||s.items.length>40||!ids(s.items))return false;
-    return s.items.every(i=>record(i)&&text(i.id,150)&&assets.has(i.assetId)&&num(i.x,0,100)&&num(i.y,0,100)&&num(i.width,.1,100)&&num(i.rotation,-180,180)&&typeof i.flipped==='boolean'&&typeof i.speech==='string'&&one(i.motion,['still','move','hop','sway','float','swim','bounce'])&&one(i.speed,['slow','normal','fast'])&&(i.target===undefined||(record(i.target)&&num(i.target.x,0,100)&&num(i.target.y,0,100))));
+    return s.items.every(i=>record(i)&&text(i.id,150)&&assets.has(i.assetId)&&num(i.x,0,100)&&num(i.y,0,100)&&num(i.width,.1,100)&&num(i.rotation,-180,180)&&typeof i.flipped==='boolean'&&typeof i.speech==='string'&&one(i.motion,drawingMotions.map(m=>m.id))&&one(i.speed,['slow','normal','fast'])&&(i.target===undefined||(record(i.target)&&num(i.target.x,0,100)&&num(i.target.y,0,100))));
   });
 }
 export function parseDrawingFile(raw:string):DrawingProject{
