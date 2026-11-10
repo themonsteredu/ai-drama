@@ -1,4 +1,5 @@
 import {backgroundEditPrompt} from '../../../lib/background-prompt';
+import {backgroundImageInput} from '../../../lib/background-image-input';
 import {authenticated,authorizeGeneration,failure,IMAGE_MODEL,keyStatus,readBody,ready,reply,sameOrigin,savedApiKey,sessionCookie,SettingsError} from '../../../lib/play-ai-server';
 export const runtime='nodejs';
 export const maxDuration=300;
@@ -6,22 +7,16 @@ export async function GET(request:Request){
  if(!ready())return reply({configured:false});
  try{return reply({...await keyStatus(),authenticated:authenticated(request)});}catch{return reply({configured:false});}
 }
-function png(value:unknown){
- if(typeof value!=='string'||value.length>1_900_000||!/^data:image\/png;base64,[A-Za-z0-9+/]+=*$/.test(value))throw new SettingsError('그림 파일을 확인해 주세요.');
- const bytes=Buffer.from(value.split(',')[1],'base64');
- if(bytes.length<24||bytes.subarray(0,8).toString('hex')!=='89504e470d0a1a0a')throw new SettingsError('PNG 그림을 확인해 주세요.');
- return {bytes,width:bytes.readUInt32BE(16),height:bytes.readUInt32BE(20)};
-}
 export async function POST(request:Request){
  try{
   sameOrigin(request);const body=await readBody(request,4_000_000);
   await authorizeGeneration(request,body.code);
   if(typeof body.prompt!=='string'||!body.prompt.trim()||body.prompt.length>600)throw new SettingsError('배경 설명을 확인해 주세요.');
-  const image=png(body.image),mask=png(body.mask);
+  const image=backgroundImageInput(body.image),mask=backgroundImageInput(body.mask,true);
   if(image.width!==1024||image.height!==1024||mask.width!==image.width||mask.height!==image.height)throw new SettingsError('그림과 보호 영역의 크기를 확인해 주세요.');
   const key=await savedApiKey(),form=new FormData();
   form.set('model',IMAGE_MODEL);form.set('quality','low');form.set('size','1024x1024');form.set('n','1');form.set('output_format','jpeg');form.set('output_compression','85');
-  form.set('image[]',new Blob([new Uint8Array(image.bytes)],{type:'image/png'}),'scene.png');
+  form.set('image[]',new Blob([new Uint8Array(image.bytes)],{type:image.mime}),image.mime==='image/jpeg'?'scene.jpg':'scene.png');
   form.set('mask',new Blob([new Uint8Array(mask.bytes)],{type:'image/png'}),'mask.png');
   form.set('prompt',backgroundEditPrompt(body.prompt,body.operation,body.strength==='gentle'?'gentle':'clear'));
   const response=await fetch('https://api.openai.com/v1/images/edits',{method:'POST',headers:{Authorization:`Bearer ${key}`},body:form,cache:'no-store',redirect:'error',signal:AbortSignal.timeout(270000)});

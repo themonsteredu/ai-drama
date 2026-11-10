@@ -60,7 +60,8 @@ export function BackgroundEditDialog({project,scene,onApply,onClose,mode='backgr
    const m=mask.current!,ratio=1024/Math.max(m.width,m.height);
    const width=Math.round(m.width*ratio),height=Math.round(m.height*ratio),x=Math.floor((1024-width)/2),y=Math.floor((1024-height)/2);
    const c=document.createElement('canvas');c.width=1024;c.height=1024;const ctx=c.getContext('2d')!;
-   ctx.fillStyle='#fff';ctx.fillRect(0,0,1024,1024);ctx.drawImage(image.current!,x,y,width,height);const source=c.toDataURL('image/png');
+   // Only the provider copy is compressed. Protected pixels still come from the stored original.
+   ctx.fillStyle='#fff';ctx.fillRect(0,0,1024,1024);ctx.drawImage(image.current!,x,y,width,height);const source=c.toDataURL('image/jpeg',.9);
    ctx.fillStyle='#000';ctx.fillRect(0,0,1024,1024);ctx.imageSmoothingEnabled=false;ctx.drawImage(m,x,y,width,height);
    const pixels=ctx.getImageData(0,0,1024,1024);for(let i=0;i<pixels.data.length;i+=4)pixels.data[i+3]=separating?(pixels.data[i]<128?0:255):(pixels.data[i]<128?255:0);
    ctx.putImageData(pixels,0,0);const scaledMask=c.toDataURL('image/png');

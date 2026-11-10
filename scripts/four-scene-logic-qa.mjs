@@ -40,6 +40,16 @@ try{
  const deletedBackground=removeDrawingAsset(withShared,resultAsset.id);assert(validateDrawingProject(deletedBackground));assert.equal(deletedBackground.scenes[0].backgroundAssetId,undefined);assert.equal(deletedBackground.scenes[0].stillOriginalAssetId,undefined);assert(deletedBackground.assets.some(a=>a.id===original.id));
  const detached=removeSceneBackground(withShared,withShared.scenes[0].id);assert(validateDrawingProject(detached));assert.deepEqual(detached.assets,withShared.assets);assert.deepEqual(detached.scenes[0].items,withShared.scenes[0].items);assert.equal(detached.scenes[0].backgroundAssetId,undefined);assert.deepEqual(detached.scenes.slice(1),withShared.scenes.slice(1));assert.equal(removeDrawingAsset(withShared,'missing'),withShared);assert.equal(JSON.stringify(parseDrawingFile(before)),before);
  console.log('PASS: shared picture deletion, AI original/result references, scene-only background removal and complete immutable undo snapshot.');
+ const {quarterTurnPixels,applyRotatedBackground}=local('./apps/play-studio/lib/drawing-rotation.js');
+ const pixels=new Uint8ClampedArray([1,0,0,255,2,0,0,127,3,0,0,255,4,0,0,0,5,0,0,255,6,0,0,255]);
+ const clockwise=quarterTurnPixels(pixels,2,3,1);assert.equal(clockwise.width,3);assert.equal(clockwise.height,2);assert.deepEqual([...clockwise.data].filter((v,i)=>i%4===0),[5,3,1,6,4,2]);assert.deepEqual(quarterTurnPixels(clockwise.data,3,2,-1).data,pixels);
+ let turn={data:pixels,width:2,height:3};for(let i=0;i<4;i++)turn=quarterTurnPixels(turn.data,turn.width,turn.height,1);assert.deepEqual(turn.data,pixels,'four rotations preserve every RGB and alpha value');
+ const sharedBackground={...withShared,scenes:withShared.scenes.map((s,i)=>i===1?{...s,backgroundAssetId:resultAsset.id}:s)};
+ const rotatedAsset={...resultAsset,name:'회전 결과'},rotationMap=new Map([[resultAsset.id,rotatedAsset],[original.id,original]]);
+ const turned=applyRotatedBackground(sharedBackground,sharedBackground.scenes[0].id,rotationMap,raster);assert(validateDrawingProject(turned));assert.notEqual(turned.scenes[0].backgroundAssetId,resultAsset.id);assert.equal(turned.scenes[1].backgroundAssetId,resultAsset.id);assert.deepEqual(turned.assets.find(a=>a.id===resultAsset.id),resultAsset);assert.equal(turned.scenes[0].protectedMask,raster);assert.deepEqual(turned.scenes[0].items,sharedBackground.scenes[0].items);assert.deepEqual(turned.scenes[0].voice,sharedBackground.scenes[0].voice);
+ assert.equal(turned.assets.length,sharedBackground.assets.length+1,'only assets shared with other scenes are copied');
+ console.log('PASS: portrait rotation, inverse/four-turn RGBA equality, shared-background isolation, rotated mask references and unchanged dialogue.');
+
 
 
 }finally{await fs.rm(temp,{recursive:true,force:true});}

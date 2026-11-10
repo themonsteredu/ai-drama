@@ -10,6 +10,7 @@ import {loadDrawingImages} from '@/lib/drawing-media';
 import {drawDrawingScene,hitDrawing} from '@/lib/drawing-renderer';
 import {downloadBlob,fileName} from '@/lib/project-files';
 import {removeDrawingAsset,removeSceneBackground} from '@/lib/drawing-removal';
+import {rotateSceneBackground} from '@/lib/drawing-rotation';
 
 function safeItemPoint(item:DrawingItem,asset:DrawingAsset,pos:{x:number;y:number}){
   const height=item.width*(1280/720)*(asset.height/asset.width);
@@ -61,6 +62,11 @@ export function useDrawingEditor(storageKey='active',initialProject=emptyDrawing
     commit(value=>removeDrawingAsset(value,assetId));setSelectedId(undefined);setDestination(false);setError('');
   }
   function removeBackground(){commit(p=>removeSceneBackground(p,p.activeSceneId));setSelectedId(undefined);setDestination(false);}
+  async function rotateScene(direction:-1|1){
+    if(!loaded||busy||recording)return;stop();setBusy(true);setError('');const before=projectRef.current;
+    try{const next=await rotateSceneBackground(before,before.activeSceneId,direction);if(projectRef.current!==before)throw new Error('장면이 바뀌었어요. 회전 버튼을 다시 눌러 주세요.');commit(()=>next);setSelectedId(undefined);setDestination(false);}
+    catch(cause){setError(cause instanceof Error?cause.message:'그림을 회전하지 못했어요.');}finally{setBusy(false);}
+  }
   function duplicate(){if(!selected||scene.items.length>=40)return;const id=drawingId('drawing');editScene({items:[...scene.items,{...selected,id,x:bounded(selected.x+5,5,95),target:selected.target?{...selected.target}:undefined}]});setSelectedId(id);}
   function layer(delta:-1|1){if(!selected)return;const items=[...scene.items],index=items.findIndex(i=>i.id===selected.id),to=bounded(index+delta,0,items.length-1);const [item]=items.splice(index,1);items.splice(to,0,item);editScene({items});}
   function addScene(copy=false){if(project.scenes.length>=6)return;const id=drawingId('scene');const next=copy?{...structuredClone(scene),id,title:`장면 ${project.scenes.length+1}`,items:scene.items.map(i=>({...i,id:drawingId('drawing')}))}:newDrawingScene(id,`장면 ${project.scenes.length+1}`);commit(p=>({...p,activeSceneId:id,scenes:[...p.scenes,next]}));setSelectedId(undefined);setDestination(false);}
@@ -140,5 +146,5 @@ export function useDrawingEditor(storageKey='active',initialProject=emptyDrawing
   }
   async function png(){setBusy(true);try{const snapshot=projectRef.current,current=snapshot.scenes.find(s=>s.id===snapshot.activeSceneId)!;const images=await loadDrawingImages(snapshot.assets);await document.fonts.ready;const c=document.createElement('canvas');c.width=2560;c.height=1440;const ctx=c.getContext('2d');if(!ctx)throw new Error('이미지를 만들지 못했어요.');ctx.scale(2,2);drawDrawingScene(ctx,snapshot,current,images,clock.current);const blob=await new Promise<Blob>((resolve,reject)=>c.toBlob(b=>b?resolve(b):reject(new Error('저장에 실패했어요.')),'image/png'));downloadBlob(blob,`${fileName(snapshot.title)}-${fileName(current.title)}.png`);}catch(cause){setError(cause instanceof Error?cause.message:'이미지를 만들지 못했어요.');}finally{setBusy(false);}}
   return {recording,recordSeconds,startVoice,finishVoice,playVoice,stopVoice,removeVoice,voicePlaying,storyPlaying,playStory,maxVoiceSeconds:VOICE_MAX_SECONDS,
-    project,scene,selected,selectedAsset,selectedId,playing,start,pause,reset,clock,destination,setDestination,loaded,blocked,saveState,error,setError,busy,commit,stop,editScene,patchItem,undo,redo,canUndo:past.current.length>0,canRedo:future.current.length>0,place,chooseItem,remove,removeAsset,removeBackground,duplicate,layer,addScene,switchScene,deleteScene,newWork,down,move,up,cancel,importWork,backup,png};
+    project,scene,selected,selectedAsset,selectedId,playing,start,pause,reset,clock,destination,setDestination,loaded,blocked,saveState,error,setError,busy,commit,stop,editScene,patchItem,undo,redo,canUndo:past.current.length>0,canRedo:future.current.length>0,place,chooseItem,remove,removeAsset,removeBackground,rotateScene,duplicate,layer,addScene,switchScene,deleteScene,newWork,down,move,up,cancel,importWork,backup,png};
 }
