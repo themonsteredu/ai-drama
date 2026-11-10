@@ -118,7 +118,8 @@ export async function recordMovie(project:DrawingProject,images:RasterCache,onPr
  const chunks:Blob[]=[];
  let recorder:MediaRecorder|null=null;
  const sources:AudioBufferSourceNode[]=[];
- const cleanup=()=>{sources.forEach(s=>{try{s.stop();}catch{}});void context.close().catch(()=>{});};
+ const captureTracks:MediaStreamTrack[]=[];
+ const cleanup=()=>{sources.forEach(s=>{try{s.stop();}catch{}});captureTracks.forEach(track=>track.stop());void context.close().catch(()=>{});};
  try{
   await context.resume().catch(()=>{});
   onProgress(0,'소리를 준비하고 있어요…');
@@ -147,9 +148,15 @@ export async function recordMovie(project:DrawingProject,images:RasterCache,onPr
   if(canceled())throw new Error('영상 만들기를 그만두었어요.');
 
   const destination=context.createMediaStreamDestination();
+  // An unconnected audio destination may never emit a frame. Some Chrome encoders
+  // then wait forever for audio and return only a WebM header, even with valid video.
+  // Feed continuous digital silence so silent scenes and gaps also have timestamps.
+  const silence=context.createBufferSource();silence.buffer=context.createBuffer(1,context.sampleRate,context.sampleRate);
+  silence.loop=true;silence.connect(destination);silence.start();sources.push(silence);
   const monitor=context.createGain();monitor.gain.value=1;monitor.connect(context.destination);
   const stream=canvas.captureStream(30);
   const tracks=[...stream.getVideoTracks(),...destination.stream.getAudioTracks()];
+  captureTracks.push(...tracks);
   if(!tracks.length)throw new Error('이 기기에서는 영상 파일을 만들 수 없어요. 아래 「화면 녹화로 만들기」를 눌러 주세요.');
   recorder=new MediaRecorder(new MediaStream(tracks),{mimeType,videoBitsPerSecond:1_800_000,audioBitsPerSecond:128_000});
   recorder.ondataavailable=event=>{if(event.data?.size)chunks.push(event.data);};
@@ -204,7 +211,7 @@ export async function recordMovie(project:DrawingProject,images:RasterCache,onPr
   recorder.stop();
   await stopped;
   const raw=new Blob(chunks,{type:recorder.mimeType||mimeType});
-  if(!raw.size)throw new Error('영상이 비어 있어요. 이 기기에서는 「화면 녹화로 만들기」를 써 주세요.');
+  if(raw.size<1024)throw new Error('영상에 장면이 담기지 않았어요. 다시 저장하거나 「화면 녹화로 만들기」를 써 주세요.');
   const blob=await stampWebmDuration(raw,total).catch(()=>raw);
   return {blob,extension:movieExtension(recorder.mimeType||mimeType),seconds:total,lostVoices};
  }finally{
