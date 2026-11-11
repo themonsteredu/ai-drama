@@ -16,12 +16,12 @@
 .movie-scene-empty{border:1px solid #d9e4f0}
 .movie-scene-card strong{display:block;font-size:16px;word-break:keep-all;overflow-wrap:anywhere}
 .movie-scene-card small{display:block;font-size:12px;color:#63799a;margin-top:4px}
-.movie-transition{margin:8px 0;padding:4px 10px 8px;border:0;border-left:2px solid #c9d9ed;margin-left:23px;min-width:0}
-.movie-transition legend{padding:0 0 4px;font-size:13px;color:#526b88}
+.drawing-app .movie-dialog .movie-transition{margin:8px 0;padding:4px 10px 8px;border:0;border-left:2px solid #c9d9ed;margin-left:23px;min-width:0}
+.drawing-app .movie-dialog .movie-transition legend{padding:0 0 4px;margin:0;font-size:14px;color:#526b88}
 .movie-transition-choices{display:grid;grid-template-columns:1fr 1fr 1.3fr;gap:6px}
-.movie-transition-choices label{min-height:46px;display:flex;align-items:center;justify-content:center;gap:5px;border:1px solid #ccd9e9;border-radius:10px;background:white;cursor:pointer;font-size:14px;font-weight:600;word-break:keep-all}
-.movie-transition-choices input{width:16px;height:16px;margin:0;accent-color:#2565b8}
-.movie-transition-choices .is-selected{background:#e8f2ff;border:2px solid #3979c9;color:#174b88}
+.drawing-app .movie-dialog .movie-transition-choices label{min-height:46px;display:flex;align-items:center;justify-content:center;gap:5px;border:1px solid #ccd9e9;border-radius:10px;background:white;cursor:pointer;font-size:15px;font-weight:700;word-break:keep-all}
+.drawing-app .movie-dialog .movie-transition-choices input[type=radio]{display:block;flex:0 0 18px;width:18px;height:18px;min-height:0;padding:0;margin:0;accent-color:#2565b8}
+.drawing-app .movie-dialog .movie-transition-choices label.is-selected{background:#e8f2ff;border:2px solid #3979c9;color:#174b88}
 .movie-transition-choices label:has(:focus-visible){outline:3px solid #2f68c4;outline-offset:2px}
 .movie-transition:disabled label{opacity:.55;cursor:default}
 .movie-content .movie-transition p{font-size:12px;color:#526b88;line-height:1.5;margin:6px 0 0}
@@ -41,5 +41,5 @@
 .movie-error{margin:0;padding:10px 12px;border-radius:12px;background:#fdecef;color:#a43043;font-size:13px;word-break:keep-all}
 .movie-content :focus-visible{outline:3px solid #2f68c4;outline-offset:3px}
 .draw-playbar .movie-open{background:#e8f2ff;color:#1b4a86;white-space:nowrap}
-@media(max-width:400px){.movie-content{padding:15px;gap:10px}.movie-transition{margin-left:8px;padding-right:0}.movie-transition-choices{gap:4px}.movie-transition-choices label{font-size:13px;gap:3px}.movie-scene-card{grid-template-columns:20px 52px minmax(0,1fr);gap:8px}.movie-scene-card img,.movie-scene-empty{width:52px;height:36px}}
+@media(max-width:400px){.movie-content{padding:15px;gap:10px}.drawing-app .movie-dialog .movie-transition{margin-left:8px;padding-right:0}.movie-transition-choices{gap:4px}.drawing-app .movie-dialog .movie-transition-choices label{font-size:13px;gap:3px}.movie-scene-card{grid-template-columns:20px 52px minmax(0,1fr);gap:8px}.movie-scene-card img,.movie-scene-empty{width:52px;height:36px}}
 @media(prefers-reduced-motion:reduce){.movie-bar i{transition:none}}
