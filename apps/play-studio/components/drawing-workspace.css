@@ -181,6 +181,8 @@
  .story-studio .draw-picture-tools h2{font-size:14px}
  .story-studio.story-wide-stage:not(.story-presenting) .draw-workspace{grid-template-columns:minmax(0,1fr)}
  .story-studio.story-wide-stage:not(.story-presenting) .story-library-column,.story-studio.story-wide-stage:not(.story-presenting) .draw-controls{display:none!important}
+ .story-studio.story-wide-stage:not(.story-presenting)>.story-header,.story-studio.story-wide-stage:not(.story-presenting)>.story-project-row{display:none}
+ .story-studio.story-wide-stage:not(.story-presenting) .draw-scene-settings{display:none}
  .story-presenting .draw-workspace>.draw-voice{display:none}
 }
 @media(min-width:760px) and (max-width:1100px){
