@@ -17,11 +17,17 @@ try{
  const {validateDrawingProject,parseDrawingFile}=local('./apps/play-studio/lib/drawing-project.js');
  const {addNarration,narrationDurations,setNarrationBoundary,activeNarration,dialogueKey,wavBytes,addDialogueSpeaker,removeDialogueSpeaker}=local('./apps/play-studio/lib/film-narration.js');
  const {movieSeconds,movieTimeline}=local('./apps/play-studio/lib/drawing-movie.js');
- const {selectedCharacterPixels,actorPlacement}=local('./apps/play-studio/lib/scene-character.js');
+ const {selectedCharacterPixels,actorPlacement,replaceCleanSceneBackground}=local('./apps/play-studio/lib/scene-character.js');
  const originalPixels=new Uint8ClampedArray([1,2,3,255,40,50,60,255,70,80,90,128,4,5,6,255]);
  const marks=new Uint8ClampedArray([255,255,255,255,0,0,0,255,0,0,0,255,255,255,255,255]);
  const cut=selectedCharacterPixels(originalPixels,marks,4,1);assert.equal(cut.left,1);assert.equal(cut.width,2);assert.deepEqual([...cut.data.slice(4,12)],[40,50,60,255,70,80,90,128]);assert.equal(cut.data[3],0);assert.equal(cut.data[15],0);assert.equal(originalPixels[3],255,'original pixels untouched');
  const placement=actorPlacement({backgroundFit:'contain'},{left:100,top:100,width:200,height:300,fullWidth:800,fullHeight:600});assert.equal(placement.x,31.25);assert.equal(placement.width,18.75);assert(Math.abs(placement.y-100*480/720)<1e-10);
+
+ const tiny='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jD1sAAAAASUVORK5CYII=';
+ const repair=emptyFourSceneProject();repair.assets=[{id:'bg',kind:'background',name:'scene',source:tiny,width:1,height:1},{id:'actor',kind:'person',name:'child',source:tiny,width:1,height:1}];repair.scenes[0].backgroundAssetId='bg';repair.scenes[0].items=[{id:'moving-actor',assetId:'actor',x:40,y:70,width:20,rotation:0,flipped:false,motion:'walk',speed:'normal',speech:'안녕',target:{x:75,y:80}}];
+ const repaired=replaceCleanSceneBackground(repair,repair.scenes[0].id,tiny);
+ assert.deepEqual(repaired.scenes[0].items,repair.scenes[0].items,'repair cannot add, move or duplicate an actor');assert.notEqual(repaired.scenes[0].backgroundAssetId,'bg');assert.equal(repair.assets.length,2,'repair remains undoable');assert(validateDrawingProject(repaired));
+ console.log('PASS: background-only duplicate repair preserves actor identity, count, motion and original undo state.');
  let p=emptyFourSceneProject();p.scenes[0].voice={id:'voice-old',source:'data:audio/wav;base64,UklGRg==',duration:100};
  p=addNarration(p,{id:'voice-full',source:'data:audio/wav;base64,UklGRg==',duration:120});
  assert.equal(movieSeconds(p),120,'full narration overrides per-scene timing without deleting it');assert.deepEqual(narrationDurations(p),[30,30,30,30]);

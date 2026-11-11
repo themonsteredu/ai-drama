@@ -12,16 +12,16 @@ try{
  }
  process.env.NEXT_PUBLIC_SUPABASE_URL='https://test.invalid';process.env.SUPABASE_SERVICE_ROLE_KEY='qa-server-only-secret';process.env.PLAY_SETTINGS_PIN='3035';
  const load=createRequire(path.join(temp,'entry.js')),server=load('./lib/play-ai-server.js'),settings=load('./app/api/play-settings/route.js'),images=load('./app/api/film-background/route.js');
- const testKey='sk-not-a-real-key-only-used-for-unit-tests';let stored=null,limited=false,providerCalls=0,providerStatus=200,lastImagePrompt='',lastImageMime='';
+ const testKey='sk-not-a-real-key-only-used-for-unit-tests';let stored=null,limited=false,providerCalls=0,providerStatus=200,lastImagePrompt='',lastImageMime='',providerCode='',queued=false,rpcCalls=[];
  global.fetch=async(url,options={})=>{
   url=String(url);
-  if(url.includes('/rpc/'))return Response.json(!limited);
+  if(url.includes('/rpc/')){const args=JSON.parse(options.body);rpcCalls.push(args);assert(args.p_limit<=100,'RPC accepts at most 100 per window');return Response.json(args.p_seconds===10?!queued:!limited);}
   if(url.startsWith('https://test.invalid/')){
    if(options.method==='POST'){stored=JSON.parse(options.body);assert(!options.body.includes(testKey));return new Response(null,{status:204});}
    return Response.json(stored?[url.includes('select=updated_at')?{updated_at:stored.updated_at}:{encrypted_key:stored.encrypted_key}]:[]);
   }
   assert(url.startsWith('https://api.openai.com/v1/'));providerCalls++;assert.equal(options.headers.Authorization,`Bearer ${testKey}`);
-  if(providerStatus!==200)return Response.json({error:{message:'never expose provider secrets'}},{status:providerStatus});
+  if(providerStatus!==200)return Response.json({error:{code:providerCode,message:'never expose provider secrets'}},{status:providerStatus});
   if(url.endsWith('/images/edits')){lastImagePrompt=options.body.get('prompt');lastImageMime=options.body.get('image[]').type;assert.equal(options.body.get('model'),'gpt-image-2.5-flare');assert.equal(options.body.get('quality'),'low');assert.equal(options.body.get('background'),'opaque');assert.equal(options.body.get('n'),'1');assert.equal(options.body.get('size'),'1024x1024');assert.equal(options.body.get('mask').type,'image/png');return Response.json({data:[{b64_json:'YWJj'}]});}
   return Response.json({id:server.IMAGE_MODEL});
  };
@@ -56,7 +56,18 @@ try{
  assert.equal((await images.POST(req({image:source,mask:source,prompt:'주인공 뒤의 숲',strength:'clear',operation:'remove-character'},otherCookie))).status,200);assert.match(lastImagePrompt,/Remove ONLY the selected character/);assert.match(lastImagePrompt,/continuing the surrounding lines, colors and textures/);assert.match(lastImagePrompt,/Do not introduce new scenery objects/);assert(!lastImagePrompt.includes('clearly visible improvement'));
  console.log('PASS: all background presets/strengths improve existing objects without scene additions; character removal only continues surrounding background.');
 
- const before=providerCalls;limited=true;assert.equal((await settings.POST(req({action:'login',pin:'3035'}))).status,429);assert.equal((await images.POST(req({image:source,mask:source,prompt:'숲'},otherCookie))).status,429);assert.equal(providerCalls,before);limited=false;
+ const before=providerCalls;limited=true;assert.equal((await settings.POST(req({action:'login',pin:'3035'}))).status,200,'valid PIN is not blocked by other students sharing Wi-Fi');assert.equal((await settings.POST(req({action:'login',pin:'wrong'}))).status,429);assert.equal((await images.POST(req({image:source,mask:source,prompt:'숲'},otherCookie))).status,429);assert.equal(providerCalls,before);limited=false;
+
+ const bucketA=rpcCalls.filter(c=>c.p_limit===60).at(-1).p_bucket;
+ await images.POST(req({image:source,mask:source,prompt:'숲'},cookie));
+ const bucketB=rpcCalls.filter(c=>c.p_limit===60).at(-1).p_bucket;
+ assert.notEqual(bucketA,bucketB,'verified browsers sharing an IP have independent quotas');
+ const beforeQueue=providerCalls;queued=true;
+ const waiting=await images.POST(req({image:source,mask:source,prompt:'숲',code:'3035'}));
+ assert.equal(waiting.status,202);assert.equal((await waiting.json()).retryable,true);assert(waiting.headers.get('set-cookie'));assert.equal(providerCalls,beforeQueue,'queued requests never reach the paid provider');queued=false;
+ providerStatus=429;providerCode='rate_limit_exceeded';const busy=await images.POST(req({image:source,mask:source,prompt:'숲'},cookie));assert.equal(busy.status,429);assert.equal((await busy.json()).retryable,true);
+ for(const code of ['credit_balance_exhausted','project_spend_limit_exceeded','insufficient_quota']){providerCode=code;const quota=await images.POST(req({image:source,mask:source,prompt:'숲'},cookie));assert.equal(quota.status,402);assert(!(await quota.json()).retryable,'billing errors are never retried');}
+ console.log('PASS: shared-IP classrooms, valid PIN login, per-session limits, shared admission pacing, safe rate-limit retry, no quota replay.');
  providerStatus=401;const failed=await settings.POST(req({action:'test'},cookie));assert.equal(failed.status,400);assert(!(await failed.text()).includes('never expose'));
  assert.equal((await settings.POST(req({action:'logout'},cookie))).headers.get('set-cookie').includes('Max-Age=0'),true);
  console.log('PASS: PIN protection, signed sessions, CSRF, encrypted persistence, cross-device settings, no secret in responses, rate limits, model lookup and one-image low-quality OpenAI edit. All external requests mocked; no real key or paid generation.');

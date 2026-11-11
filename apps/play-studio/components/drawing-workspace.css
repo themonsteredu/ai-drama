@@ -146,3 +146,53 @@
  .draw-stage-status .draw-destination-done{font-size:12px}
  .draw-voice .draw-scene-audio-finish>button{flex:1}
 }
+
+/* Give the picture the height that used to be occupied by stacked audio rows. */
+.draw-wide-toggle{display:none}
+@media(min-width:760px){
+ .story-studio:not(.story-presenting) .draw-workspace{grid-template-columns:148px minmax(0,1fr) 212px;grid-template-rows:minmax(0,1fr) auto;gap:8px;padding:6px 8px}
+ .story-studio:not(.story-presenting) .draw-stage-column{position:relative;overflow:hidden}
+ .story-studio .draw-picture-tools,.story-studio .draw-controls,.story-studio .draw-library{padding:8px}
+ .story-studio .draw-scenes>button{min-height:42px;max-width:150px;flex-basis:75px}
+ .story-studio .draw-scenes>button>img,.story-studio .story-thumb-empty{width:30px;max-height:32px}
+ .story-studio .draw-stage-heading{height:36px;margin:0;justify-content:space-between}
+ .story-studio .draw-stage-heading h1{font-size:13px}
+ .story-studio .draw-wide-toggle{display:inline-flex;align-items:center;min-height:32px;padding:4px 10px;font-size:12px;border-radius:8px}
+ .story-studio .draw-stage-status:not(.is-choosing){display:none}
+ .story-studio .draw-stage-status.is-choosing{position:absolute;z-index:2;left:6px;right:6px;top:84px;background:#fff9e9ed;border:1px solid #e7d39b;border-radius:8px;padding:2px 5px}
+ .story-studio .draw-playbar{margin:5px 0 0}
+ .story-studio .draw-stage-items{margin:4px 0 0}
+ .story-studio .draw-scene-settings{max-height:150px;overflow:auto}
+ .story-studio .draw-workspace>.draw-voice{grid-column:1/-1;grid-row:2;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-areas:'head actions' 'timing finish';gap:4px 14px;margin:0;padding:7px 10px;border-radius:10px;align-items:center}
+ .story-studio .draw-voice-head{grid-area:head}
+ .story-studio .draw-voice-main-actions{grid-area:actions;flex-wrap:nowrap}
+ .story-studio .draw-voice-main-actions .draw-voice-upload{min-width:0;min-height:38px}
+ .story-studio .draw-voice-main-actions>button{flex-shrink:0;min-height:38px;font-size:12px;padding:5px 8px;white-space:nowrap}
+ .story-studio .draw-voice-timing{grid-area:timing}
+ .story-studio .draw-scene-audio-finish{grid-area:finish;flex-wrap:wrap}
+ .story-studio .draw-scene-audio-finish>button{min-height:36px;font-size:12px;padding:5px 7px}
+ .story-studio .draw-voice-timing small{display:none}
+ .story-studio .draw-scene-audio-mode{grid-column:1/-1;grid-row:3;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:3px 8px}
+ .story-studio .draw-scene-audio-mode p{margin:0;font-size:12px}
+ .story-studio .draw-scene-audio-mode button{min-height:32px;font-size:12px}
+ .story-studio .draw-motion-grid button{min-height:40px}
+ .story-studio .draw-motion-grid .story-motion span{display:none}
+ .story-studio .story-project-row{min-height:38px;padding-block:2px}
+ .story-studio .draw-picture-tools h2{font-size:14px}
+ .story-studio.story-wide-stage:not(.story-presenting) .draw-workspace{grid-template-columns:minmax(0,1fr)}
+ .story-studio.story-wide-stage:not(.story-presenting) .story-library-column,.story-studio.story-wide-stage:not(.story-presenting) .draw-controls{display:none!important}
+ .story-presenting .draw-workspace>.draw-voice{display:none}
+}
+@media(min-width:760px) and (max-width:1100px){
+ .story-studio:not(.story-presenting) .draw-workspace{grid-template-columns:136px minmax(0,1fr) 192px;gap:6px;padding:6px}
+ .story-studio .draw-scenes>button>img{display:none}
+ .story-studio .draw-workspace>.draw-voice{grid-template-columns:minmax(0,1fr) minmax(0,1.2fr);gap:4px 8px}
+ .story-studio .draw-voice-head p{font-size:12px}
+ .story-studio .draw-voice-head strong{margin-left:0}
+ .story-studio .draw-voice-main-actions>button{font-size:11px;padding:5px 6px;white-space:normal}
+ .story-studio .draw-voice .draw-scene-audio-finish>button{font-size:11px;padding:5px 6px}
+}
+@media(max-width:759px){
+ .draw-workspace>.draw-voice{grid-column:1/-1}
+ .story-studio[data-mobile-tab=pictures] .draw-workspace>.draw-voice,.story-studio[data-mobile-tab=actions] .draw-workspace>.draw-voice{display:none}
+}

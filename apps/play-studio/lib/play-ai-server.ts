@@ -4,7 +4,7 @@ export const IMAGE_MODEL='gpt-image-2.5-flare';
 export const SESSION_COOKIE='moakit-play-settings';
 const SESSION_SECONDS=1800;
 export class SettingsError extends Error {
- constructor(message:string,public status=400){super(message);}
+ constructor(message:string,public status=400,public retryAfter=0){super(message);}
 }
 export function reply(value:unknown,status=200,headers:Record<string,string>={}){
  return Response.json(value,{status,headers:{'Cache-Control':'no-store',...headers}});
@@ -42,18 +42,24 @@ async function db(path:string,init:RequestInit={}){
 }
 export async function limitRequests(request:Request,kind:'login'|'generate'|'settings'|'voice'){
  const ip=(request.headers.get('x-vercel-forwarded-for')||request.headers.get('x-forwarded-for')||'local').split(',')[0].trim();
- const bucket=mac(`${kind}:${ip}`),limit=kind==='login'?8:kind==='generate'?60:kind==='voice'?120:20;
- const allowed=await db('rpc/play_film_rate_limit',{method:'POST',headers:{Prefer:'return=representation'},body:JSON.stringify({p_bucket:bucket,p_limit:limit,p_seconds:600})});
- if(allowed!==true)throw new SettingsError('요청이 많아요. 10분 후 다시 시도해 주세요.',429);
+ // A classroom shares one public IP. Verified browser sessions must not use
+ // up each other's allowance; unsuccessful PIN attempts still share an IP cap.
+ const session=authenticated(request)?request.headers.get('cookie')?.split(';').map(v=>v.trim()).find(v=>v.startsWith(`${SESSION_COOKIE}=`)):undefined;
+ const bucket=mac(`${kind}:${kind!=='login'&&session?session:ip}`),limit=kind==='login'?8:kind==='generate'?60:kind==='voice'?100:20,seconds=kind==='voice'?300:600;
+ const allowed=await db('rpc/play_film_rate_limit',{method:'POST',headers:{Prefer:'return=representation'},body:JSON.stringify({p_bucket:bucket,p_limit:limit,p_seconds:seconds})});
+ if(allowed!==true)throw new SettingsError(kind==='login'?'확인 번호를 여러 번 잘못 입력했어요. 번호를 확인해 주세요.':'요청이 몰려 잠시 대기하고 있어요.',429,kind==='generate'||kind==='voice'?60:0);
+}
+/** Shared pacing works across serverless instances, using the existing atomic RPC. */
+export async function claimBackgroundTurn(){
+ return await db('rpc/play_film_rate_limit',{method:'POST',headers:{Prefer:'return=representation'},body:JSON.stringify({p_bucket:mac('background-starts-v1'),p_limit:2,p_seconds:10})})===true;
 }
 export async function checkPin(request:Request,pin:unknown){
  if(!ready())throw new SettingsError('설정 저장소를 준비 중이에요.',503);
- await limitRequests(request,'login');
- if(typeof pin!=='string'||pin.length>32||!equal(pin,process.env.PLAY_SETTINGS_PIN!))throw new SettingsError('설정 번호가 맞지 않아요.',401);
+ if(typeof pin!=='string'||pin.length>32||!equal(pin,process.env.PLAY_SETTINGS_PIN!)){await limitRequests(request,'login');throw new SettingsError('설정 번호가 맞지 않아요.',401);}
 }
-export async function authorizeGeneration(request:Request,pin:unknown,kind:'generate'|'voice'='generate'){
+export async function authorizeGeneration(request:Request,pin:unknown,kind:'generate'|'voice'='generate',countRequest=true){
  if(!authenticated(request))await checkPin(request,pin);
- await limitRequests(request,kind);
+ if(countRequest)await limitRequests(request,kind);
 }
 function encryptionKey(){return Buffer.from(hkdfSync('sha256',serverSecret(),'moakit-play','film-api-key-v1',32));}
 export function encryptKey(value:string){
@@ -78,4 +84,4 @@ export async function savedApiKey(){
  if(!rows.length)throw new SettingsError('GPT API 설정에서 키를 먼저 저장해 주세요.',503);
  return decryptKey(rows[0].encrypted_key);
 }
-export function failure(error:unknown){return error instanceof SettingsError?reply({error:error.message},error.status):reply({error:'연결을 완료하지 못했어요. 잠시 후 다시 시도해 주세요.'},503);}
+export function failure(error:unknown){return error instanceof SettingsError?reply({error:error.message,...(error.retryAfter?{retryable:true,retryAfter:error.retryAfter}:{})},error.status,error.retryAfter?{'Retry-After':String(error.retryAfter)}:{}):reply({error:'연결을 완료하지 못했어요. 잠시 후 다시 시도해 주세요.'},503);}
