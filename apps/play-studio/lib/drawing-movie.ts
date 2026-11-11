@@ -15,8 +15,8 @@ export function movieTimeline(project:DrawingProject){
 }
 export function movieSeconds(project:DrawingProject){return movieTimeline(project).reduce((n,s)=>n+s.seconds,0);}
 export function clockLabel(seconds:number){
- const whole=Math.max(0,Math.round(seconds));
- return `${Math.floor(whole/60)}분 ${String(whole%60).padStart(2,'0')}초`;
+ const rounded=Math.max(0,Math.round(seconds*100)/100),minutes=Math.floor(rounded/60),rest=Number((rounded-minutes*60).toFixed(2));
+ return `${minutes}분 ${rest<10?'0':''}${rest}초`;
 }
 
 // H.264 MP4 travels furthest — school computers, Padlet, messengers — so ask for it by name first.
@@ -155,6 +155,7 @@ export async function recordMovie(project:DrawingProject,images:RasterCache,onPr
   silence.loop=true;silence.connect(destination);silence.start();sources.push(silence);
   const monitor=context.createGain();monitor.gain.value=1;monitor.connect(context.destination);
   const stream=canvas.captureStream(30);
+  const videoTrack=stream.getVideoTracks()[0] as CanvasCaptureMediaStreamTrack|undefined;
   const tracks=[...stream.getVideoTracks(),...destination.stream.getAudioTracks()];
   captureTracks.push(...tracks);
   if(!tracks.length)throw new Error('이 기기에서는 영상 파일을 만들 수 없어요. 아래 「화면 녹화로 만들기」를 눌러 주세요.');
@@ -170,6 +171,7 @@ export async function recordMovie(project:DrawingProject,images:RasterCache,onPr
   // One blob, no timeslice: asking for chunks makes Chrome drop the header's Duration
   // field altogether, and the saved movie then reports no length at all.
   recorder.start();
+  videoTrack?.requestFrame?.();
   const base=context.currentTime;
   // Adjacent scenes with the same soundtrack share one source, so music never restarts at each cut.
   const musicRuns:{music:NonNullable<ReturnType<typeof musicSource>>;at:number;seconds:number}[]=[];
@@ -192,19 +194,22 @@ export async function recordMovie(project:DrawingProject,images:RasterCache,onPr
   }
 
   await new Promise<void>((resolve,reject)=>{
-   let frame=0;
+   let timer=0;
    const paint=()=>{
-    if(canceled()){cancelAnimationFrame(frame);reject(new Error('영상 만들기를 그만두었어요.'));return;}
+    if(canceled()){clearTimeout(timer);reject(new Error('영상 만들기를 그만두었어요.'));return;}
     // Use the same clock that schedules the dialogue; rendering delays must not advance the cut early.
     const elapsed=context.currentTime-base;
     if(elapsed>=total){resolve();return;}
     const index=Math.max(0,plan.findIndex(step=>elapsed<step.at+step.seconds));
     const step=plan[index<0?plan.length-1:index];
     drawDrawingScene(ctx,project,step.scene,images,Math.max(0,elapsed-step.at));
+    videoTrack?.requestFrame?.();
     onProgress(Math.min(.99,Math.max(0,elapsed)/total),`${index+1} / ${plan.length} 장면을 담는 중…`);
-    frame=requestAnimationFrame(paint);
+    // Off-screen canvas animation frames may be throttled to 1 fps. Capture on an
+    // audio-clock timer instead, waking at the next cut/end even between frames.
+    timer=window.setTimeout(paint,Math.max(1,Math.min(1000/30,(step.at+step.seconds-elapsed)*1000)));
    };
-   frame=requestAnimationFrame(paint);
+   paint();
   });
 
   onProgress(.99,'영상을 마무리하는 중…');

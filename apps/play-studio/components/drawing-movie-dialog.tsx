@@ -48,7 +48,7 @@ export function DrawingMovieDialog({project,onPlayStory,onClose}:Props){
     {movieTimeline(project).map(({scene,seconds},index)=><li key={scene.id}>
      <b>{String(index+1).padStart(2,'0')}</b>
      <span>{scene.title}</span>
-     <small>{narration?'전체 녹음 이어짐':scene.voice?`목소리 ${Number(scene.voice.duration.toFixed(2))}초`:'목소리 없음'} · {Number(seconds.toFixed(1))}초</small>
+     <small>{narration?'전체 녹음 이어짐':scene.voice?`목소리 ${Number(scene.voice.duration.toFixed(2))}초`:'목소리 없음'} · 장면 {Number(seconds.toFixed(2))}초</small>
     </li>)}
    </ul>
    <p className="movie-total">모두 <b>{clockLabel(total)}</b>짜리 이야기예요. {narration?`전체 녹음 하나로 이어져요.${project.narration?.useGenerated?' AI가 만든 목소리예요.':''}`:`목소리를 담은 장면은 ${withVoice} / ${project.scenes.length}개예요.`}</p>
