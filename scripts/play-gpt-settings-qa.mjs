@@ -12,9 +12,10 @@ try{
  }
  process.env.NEXT_PUBLIC_SUPABASE_URL='https://test.invalid';process.env.SUPABASE_SERVICE_ROLE_KEY='qa-server-only-secret';process.env.PLAY_SETTINGS_PIN='3035';
  const load=createRequire(path.join(temp,'entry.js')),server=load('./lib/play-ai-server.js'),settings=load('./app/api/play-settings/route.js'),images=load('./app/api/film-background/route.js');
- const testKey='sk-not-a-real-key-only-used-for-unit-tests';let stored=null,limited=false,providerCalls=0,providerStatus=200,lastImagePrompt='',lastImageMime='',providerCode='',queued=false,rpcCalls=[];
+ const testKey='sk-not-a-real-key-only-used-for-unit-tests';let stored=null,pinLocked=false,limited=false,providerCalls=0,providerStatus=200,lastImagePrompt='',lastImageMime='',providerCode='',queued=false,rpcCalls=[];
  global.fetch=async(url,options={})=>{
   url=String(url);
+  if(url.endsWith('/rpc/play_film_pin_attempt'))return Response.json(!pinLocked);
   if(url.includes('/rpc/')){const args=JSON.parse(options.body);rpcCalls.push(args);assert(args.p_limit<=100,'RPC accepts at most 100 per window');return Response.json(args.p_seconds===10?!queued:!limited);}
   if(url.startsWith('https://test.invalid/')){
    if(options.method==='POST'){stored=JSON.parse(options.body);assert(!options.body.includes(testKey));return new Response(null,{status:204});}
@@ -56,7 +57,7 @@ try{
  assert.equal((await images.POST(req({image:source,mask:source,prompt:'주인공 뒤의 숲',strength:'clear',operation:'remove-character'},otherCookie))).status,200);assert.match(lastImagePrompt,/Remove ONLY the selected character/);assert.match(lastImagePrompt,/continuing the surrounding lines, colors and textures/);assert.match(lastImagePrompt,/Do not introduce new scenery objects/);assert(!lastImagePrompt.includes('clearly visible improvement'));
  console.log('PASS: all background presets/strengths improve existing objects without scene additions; character removal only continues surrounding background.');
 
- const before=providerCalls;limited=true;assert.equal((await settings.POST(req({action:'login',pin:'3035'}))).status,200,'valid PIN is not blocked by other students sharing Wi-Fi');assert.equal((await settings.POST(req({action:'login',pin:'wrong'}))).status,429);assert.equal((await images.POST(req({image:source,mask:source,prompt:'숲'},otherCookie))).status,429);assert.equal(providerCalls,before);limited=false;
+ const before=providerCalls;limited=true;assert.equal((await settings.POST(req({action:'login',pin:'3035'}))).status,200,'valid PIN is not blocked by other students sharing Wi-Fi');pinLocked=true;assert.equal((await settings.POST(req({action:'login',pin:'3035'}))).status,429,'even valid PIN cannot bypass an existing failed-attempt lockout');assert.equal((await settings.POST(req({action:'login',pin:'wrong'}))).status,429);pinLocked=false;assert.equal((await images.POST(req({image:source,mask:source,prompt:'숲'},otherCookie))).status,429);assert.equal(providerCalls,before);limited=false;
 
  const bucketA=rpcCalls.filter(c=>c.p_limit===60).at(-1).p_bucket;
  await images.POST(req({image:source,mask:source,prompt:'숲'},cookie));

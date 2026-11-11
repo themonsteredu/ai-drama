@@ -55,7 +55,11 @@ export async function claimBackgroundTurn(){
 }
 export async function checkPin(request:Request,pin:unknown){
  if(!ready())throw new SettingsError('설정 저장소를 준비 중이에요.',503);
- if(typeof pin!=='string'||pin.length>32||!equal(pin,process.env.PLAY_SETTINGS_PIN!)){await limitRequests(request,'login');throw new SettingsError('설정 번호가 맞지 않아요.',401);}
+ const valid=typeof pin==='string'&&pin.length<=32&&equal(pin,process.env.PLAY_SETTINGS_PIN!);
+ const ip=(request.headers.get('x-vercel-forwarded-for')||request.headers.get('x-forwarded-for')||'local').split(',')[0].trim();
+ const allowed=await db('rpc/play_film_pin_attempt',{method:'POST',headers:{Prefer:'return=representation'},body:JSON.stringify({p_bucket:mac(`login:${ip}`),p_valid:valid})});
+ if(allowed!==true)throw new SettingsError('확인 번호를 여러 번 잘못 입력했어요. 10분 뒤 다시 확인해 주세요.',429);
+ if(!valid)throw new SettingsError('설정 번호가 맞지 않아요.',401);
 }
 export async function authorizeGeneration(request:Request,pin:unknown,kind:'generate'|'voice'='generate',countRequest=true){
  if(!authenticated(request))await checkPin(request,pin);

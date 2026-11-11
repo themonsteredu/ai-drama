@@ -35,3 +35,26 @@ end;
 $$;
 revoke all on function public.play_film_rate_limit(text,integer,integer) from public, anon, authenticated;
 grant execute on function public.play_film_rate_limit(text,integer,integer) to service_role;
+
+-- Correct classroom logins do not consume the shared Wi-Fi failure budget.
+-- Checking and counting failures happen under one row lock, including valid
+-- attempts after a lockout, so the PIN cannot be brute-forced past the cap.
+create or replace function public.play_film_pin_attempt(p_bucket text, p_valid boolean)
+returns boolean language plpgsql security invoker set search_path = '' as $$
+declare attempts_now integer; started timestamptz;
+begin
+ if length(p_bucket)>128 or p_valid is null then raise exception 'invalid PIN attempt'; end if;
+ insert into public.play_film_request_limits(bucket,attempts,window_start)
+ values(p_bucket,0,now()) on conflict(bucket) do nothing;
+ select attempts,window_start into attempts_now,started from public.play_film_request_limits where bucket=p_bucket for update;
+ if started < now()-interval '10 minutes' then
+  attempts_now:=0;
+  update public.play_film_request_limits set attempts=0,window_start=now() where bucket=p_bucket;
+ end if;
+ if attempts_now>=8 then return false; end if;
+ if not p_valid then update public.play_film_request_limits set attempts=attempts+1 where bucket=p_bucket; end if;
+ return true;
+end;
+$$;
+revoke all on function public.play_film_pin_attempt(text,boolean) from public, anon, authenticated;
+grant execute on function public.play_film_pin_attempt(text,boolean) to service_role;
