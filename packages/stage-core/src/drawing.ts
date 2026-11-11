@@ -3,6 +3,7 @@ export type DrawingKind = 'person' | 'animal' | 'plant' | 'nature' | 'prop' | 'b
 export type DrawingMotion = 'still' | 'move' | 'walk' | 'run' | 'dance' | 'hop' | 'sway' | 'float' | 'swim' | 'bounce';
 export type DrawingSpeed = 'slow' | 'normal' | 'fast';
 export type DrawingWeather = 'none' | 'wind' | 'rain' | 'snow';
+export type DrawingTransition = 'cut' | 'dissolve' | 'fade';
 /** Optional non-destructive editing metadata; version-1 projects without it still load. */
 export interface DrawingEdit { version: 1; original: string; mask: string; width: number; height: number; crop: {x: number; y: number; width: number; height: number}; }
 export interface DrawingAsset { id: string; name: string; kind: DrawingKind; source: string; width: number; height: number; edit?: DrawingEdit; }
@@ -12,6 +13,8 @@ export interface DrawingItem {
   target?: { x: number; y: number }; speech: string;
 }
 export interface DrawingScene {
+  /** How this scene hands over to the next; absent in older projects means a cut. */
+  transition?: DrawingTransition;
   durationSeconds?: number;
   stillOriginalAssetId?: string;
   protectedMask?: string;

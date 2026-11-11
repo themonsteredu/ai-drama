@@ -8,14 +8,27 @@
 .movie-content button{min-height:44px;border:1px solid #cfdcec;border-radius:12px;background:white;color:inherit;padding:10px 12px;font:inherit;cursor:pointer}
 .movie-content header button{align-self:start;min-width:44px}
 .movie-content button:disabled{opacity:.5;cursor:default}
-.movie-scenes{list-style:none;margin:0;padding:0;display:grid;gap:6px;max-height:190px;overflow:auto}
-.movie-scenes li{display:grid;grid-template-columns:30px 1fr auto;align-items:center;gap:8px;padding:8px 10px;border-radius:12px;background:#eff5fd}
-.movie-scenes b{font-size:12px;color:#55708f}
-.movie-scenes span{font-size:14px;word-break:keep-all}
-.movie-scenes small{font-size:11px;color:#63799a;white-space:nowrap}
+.movie-scenes{list-style:none;margin:0;padding:0;display:grid;gap:0;max-height:min(48dvh,420px);overflow:auto;overscroll-behavior:contain;padding-right:4px}
+.movie-scenes li{min-width:0}
+.movie-scene-card{display:grid;grid-template-columns:24px 64px minmax(0,1fr);align-items:center;gap:10px;padding:10px 12px;border-radius:12px;background:#eff5fd}
+.movie-scene-card>b{font-size:15px;color:#55708f}
+.movie-scene-card img,.movie-scene-empty{width:64px;height:44px;object-fit:contain;border-radius:6px;background:white}
+.movie-scene-empty{border:1px solid #d9e4f0}
+.movie-scene-card strong{display:block;font-size:16px;word-break:keep-all;overflow-wrap:anywhere}
+.movie-scene-card small{display:block;font-size:12px;color:#63799a;margin-top:4px}
+.movie-transition{margin:8px 0;padding:4px 10px 8px;border:0;border-left:2px solid #c9d9ed;margin-left:23px;min-width:0}
+.movie-transition legend{padding:0 0 4px;font-size:13px;color:#526b88}
+.movie-transition-choices{display:grid;grid-template-columns:1fr 1fr 1.3fr;gap:6px}
+.movie-transition-choices label{min-height:46px;display:flex;align-items:center;justify-content:center;gap:5px;border:1px solid #ccd9e9;border-radius:10px;background:white;cursor:pointer;font-size:14px;font-weight:600;word-break:keep-all}
+.movie-transition-choices input{width:16px;height:16px;margin:0;accent-color:#2565b8}
+.movie-transition-choices .is-selected{background:#e8f2ff;border:2px solid #3979c9;color:#174b88}
+.movie-transition-choices label:has(:focus-visible){outline:3px solid #2f68c4;outline-offset:2px}
+.movie-transition:disabled label{opacity:.55;cursor:default}
+.movie-content .movie-transition p{font-size:12px;color:#526b88;line-height:1.5;margin:6px 0 0}
 .movie-total{margin:0;font-size:13px;color:#4a627f}
-.movie-watch{font-size:17px;font-weight:800;background:#e8f2ff;border-color:#9dc2ee;color:#1b4a86}
-.movie-make{font-size:17px;font-weight:800;background:#2f68c4;border-color:#2f68c4;color:white}
+.movie-total span{display:block;font-size:12px;margin-top:4px}
+.movie-content .movie-watch{font-size:17px;font-weight:800;background:#e8f2ff;border-color:#9dc2ee;color:#1b4a86}
+.movie-content .movie-make{font-size:17px;font-weight:800;background:#2f68c4;border-color:#2f68c4;color:white}
 .movie-note{margin:0;font-size:12px;color:#63799a}
 .movie-fallback{padding:13px;border:1px solid #f2d9a8;border-radius:14px;background:#fffaf0}
 .movie-fallback ol{margin:8px 0 0;padding-left:20px;display:grid;gap:7px;font-size:13px;line-height:1.6;word-break:keep-all}
@@ -28,5 +41,5 @@
 .movie-error{margin:0;padding:10px 12px;border-radius:12px;background:#fdecef;color:#a43043;font-size:13px;word-break:keep-all}
 .movie-content :focus-visible{outline:3px solid #2f68c4;outline-offset:3px}
 .draw-playbar .movie-open{background:#e8f2ff;color:#1b4a86;white-space:nowrap}
-@media(max-width:400px){.movie-content{padding:15px;gap:10px}.movie-scenes li{grid-template-columns:26px 1fr;grid-template-areas:'n t' '. s'}.movie-scenes small{grid-area:s;white-space:normal}}
+@media(max-width:400px){.movie-content{padding:15px;gap:10px}.movie-transition{margin-left:8px;padding-right:0}.movie-transition-choices{gap:4px}.movie-transition-choices label{font-size:13px;gap:3px}.movie-scene-card{grid-template-columns:20px 52px minmax(0,1fr);gap:8px}.movie-scene-card img,.movie-scene-empty{width:52px;height:36px}}
 @media(prefers-reduced-motion:reduce){.movie-bar i{transition:none}}

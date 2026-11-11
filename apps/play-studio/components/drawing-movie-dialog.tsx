@@ -1,15 +1,16 @@
 'use client';
 import {useEffect,useRef,useState} from 'react';
-import type {DrawingProject} from '@/lib/drawing-project';
+import type {DrawingProject,DrawingTransition} from '@/lib/drawing-project';
+import {transitionChoices} from '@/lib/drawing-transition';
 import {loadDrawingImages} from '@/lib/drawing-media';
 import {clockLabel,movieSeconds,movieSupported,recordMovie,movieTimeline} from '@/lib/drawing-movie';
 import {activeNarration} from '@/lib/film-narration';
 import {downloadBlob,fileName} from '@/lib/project-files';
 import './drawing-movie.css';
 
-type Props={project:DrawingProject;onPlayStory:()=>void;onClose:()=>void};
+type Props={project:DrawingProject;onTransition:(sceneId:string,kind:DrawingTransition)=>void;onPlayStory:()=>void;onClose:()=>void};
 
-export function DrawingMovieDialog({project,onPlayStory,onClose}:Props){
+export function DrawingMovieDialog({project,onTransition,onPlayStory,onClose}:Props){
  const dialog=useRef<HTMLDialogElement>(null),canceled=useRef(false),alive=useRef(true);
  // Browser support is read on the client only; the server has no MediaRecorder to ask.
  const [usable,setUsable]=useState<boolean|null>(null);
@@ -42,18 +43,27 @@ export function DrawingMovieDialog({project,onPlayStory,onClose}:Props){
  }
  return <dialog ref={dialog} className="movie-dialog" aria-labelledby="movie-title" onCancel={event=>{if(busy)event.preventDefault();else onClose();}} onClick={event=>{if(event.target===event.currentTarget)close();}}>
   <div className="movie-content">
-   <header><div><h2 id="movie-title">🎬 영상 만들기</h2><p>{narration?'전체 녹음과 정한 장면 시간에 맞춰 이어져요.':'장면별 녹음 길이에 맞춰 대사가 끝나면 다음 장면으로 넘어가요.'}</p></div><button type="button" aria-label="영상 창 닫기" disabled={busy} onClick={close}>×</button></header>
+   <header><div><h2 id="movie-title">영상 만들기</h2><p>{project.scenes.length>1?'그림과 그림 사이를 어떻게 이어 볼까요?':'이 장면을 영상으로 만들어요.'}</p></div><button type="button" aria-label="영상 창 닫기" disabled={busy} onClick={close}>×</button></header>
 
    <ul className="movie-scenes" aria-label="장면 차례">
-    {movieTimeline(project).map(({scene,seconds},index)=><li key={scene.id}>
-     <b>{String(index+1).padStart(2,'0')}</b>
-     <span>{scene.title}</span>
-     <small>{narration?'전체 녹음 이어짐':scene.voice?`목소리 ${Number(scene.voice.duration.toFixed(2))}초`:'목소리 없음'} · 장면 {Number(seconds.toFixed(2))}초</small>
-    </li>)}
+    {movieTimeline(project).map(({scene,seconds},index)=>{
+     const background=project.assets.find(a=>a.id===scene.backgroundAssetId),selected=scene.transition??'cut';
+     return <li key={scene.id}>
+      <div className="movie-scene-card"><b>{index+1}</b>{background?<img src={background.source} alt={`${scene.title} 그림`}/>:<span className="movie-scene-empty" aria-hidden="true"/>}<div><strong>{scene.title}</strong><small>{narration?'전체 녹음':scene.voice?'녹음 있음':'녹음 없음'} · {Number(seconds.toFixed(2))}초</small></div></div>
+      {index<project.scenes.length-1?<fieldset className="movie-transition" disabled={busy} aria-label={`${index+1}장면에서 ${index+2}장면으로 바꾸기`}>
+       <legend>다음 장면은</legend>
+       <div className="movie-transition-choices">{transitionChoices.map(choice=><label key={choice.id} className={selected===choice.id?'is-selected':''}>
+        <input type="radio" name={`transition-${scene.id}`} value={choice.id} checked={selected===choice.id} onChange={()=>onTransition(scene.id,choice.id)}/>
+        <span>{choice.label}</span>
+       </label>)}</div>
+       <p aria-live="polite">{transitionChoices.find(choice=>choice.id===selected)?.description}</p>
+      </fieldset>:null}
+     </li>;
+    })}
    </ul>
-   <p className="movie-total">모두 <b>{clockLabel(total)}</b>짜리 이야기예요. {narration?`전체 녹음 하나로 이어져요.${project.narration?.useGenerated?' AI가 만든 목소리예요.':''}`:`목소리를 담은 장면은 ${withVoice} / ${project.scenes.length}개예요.`}</p>
+   <p className="movie-total">모두 <b>{clockLabel(total)}</b> · {narration?'전체 녹음 사용':`녹음 ${withVoice} / ${project.scenes.length}장면`}<span>녹음은 자르지 않고 끝까지 들려줘요.</span></p>
 
-   <button type="button" className="movie-watch" disabled={busy} onClick={()=>{onPlayStory();onClose();}}>▶ 처음부터 쭉 보기</button>
+   <button type="button" className="movie-watch" disabled={busy} onClick={()=>{onPlayStory();onClose();}}>처음부터 보기</button>
 
    {usable===false
     ?<section className="movie-fallback">
@@ -66,7 +76,7 @@ export function DrawingMovieDialog({project,onPlayStory,onClose}:Props){
        <li>이야기가 끝나면 녹화를 멈춰요. 영상이 사진첩에 저장돼요.</li>
       </ol>
      </section>
-    :<><button type="button" className="movie-make" disabled={busy||usable===null} onClick={()=>void make()}>{busy?'만드는 중…':'⬇ 영상 파일로 저장'}</button>
+    :<><button type="button" className="movie-make" disabled={busy||usable===null} onClick={()=>void make()}>{busy?'만드는 중…':'영상 저장하기'}</button>
       <p className="movie-note">이야기 길이만큼 기다려야 해요({clockLabel(total)}). 만드는 동안 화면을 그대로 두세요.</p></>}
 
    {busy?<div className="movie-progress"><div className="movie-bar"><i style={{width:`${Math.round(ratio*100)}%`}}/></div><p role="status" aria-live="polite">{label||'만드는 중…'}</p><button type="button" className="movie-cancel" onClick={()=>{canceled.current=true;}}>그만하기</button></div>:null}

@@ -2,6 +2,7 @@ import type {DrawingProject,DrawingScene} from '../../../packages/stage-core/src
 import {drawDrawingScene,DRAW_WIDTH,DRAW_HEIGHT,type RasterCache} from './drawing-renderer';
 import {effectiveMusic,synthMusic} from './drawing-music';
 import {activeNarration,narrationDurations} from './film-narration';
+import {createTransitionPainter,incomingTransition} from './drawing-transition';
 
 /** Automatic scenes start with their recording and cut when that recording ends. */
 export const SCENE_PAD=0,SCENE_MIN=2.5,SCENE_SILENT=4,VOICE_LEAD=0;
@@ -194,6 +195,7 @@ export async function recordMovie(project:DrawingProject,images:RasterCache,onPr
   }
 
   await new Promise<void>((resolve,reject)=>{
+   const paintTransition=createTransitionPainter();
    let timer=0;
    const paint=()=>{
     if(canceled()){clearTimeout(timer);reject(new Error('영상 만들기를 그만두었어요.'));return;}
@@ -202,7 +204,8 @@ export async function recordMovie(project:DrawingProject,images:RasterCache,onPr
     if(elapsed>=total){resolve();return;}
     const index=Math.max(0,plan.findIndex(step=>elapsed<step.at+step.seconds));
     const step=plan[index<0?plan.length-1:index];
-    drawDrawingScene(ctx,project,step.scene,images,Math.max(0,elapsed-step.at));
+    const localSeconds=Math.max(0,elapsed-step.at);
+    if(!paintTransition(ctx,project,step.scene,images,localSeconds,incomingTransition(plan,index)))drawDrawingScene(ctx,project,step.scene,images,localSeconds);
     videoTrack?.requestFrame?.();
     onProgress(Math.min(.99,Math.max(0,elapsed)/total),`${index+1} / ${plan.length} 장면을 담는 중…`);
     // Off-screen canvas animation frames may be throttled to 1 fps. Capture on an

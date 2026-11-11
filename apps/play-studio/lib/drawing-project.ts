@@ -47,6 +47,7 @@ export function validateDrawingProject(v:unknown):v is DrawingProject{
   return v.scenes.every(s=>{
     if(!record(s)||!text(s.id,150)||!text(s.title,40)||typeof s.background!=='string'||!/^#[0-9a-f]{6}$/i.test(s.background)||!text(s.caption,120))return false;
     if(s.durationSeconds!==undefined&&!num(s.durationSeconds,1,600))return false;
+    if(s.transition!==undefined&&!one(s.transition,['cut','dissolve','fade']))return false;
     if(s.backgroundAssetId!==undefined&&!assets.has(s.backgroundAssetId))return false;
     if(s.stillOriginalAssetId!==undefined&&!assets.has(s.stillOriginalAssetId))return false;
     if(s.protectedMask!==undefined&&(!validRasterSource(s.protectedMask)||!(s.protectedMask as string).startsWith('data:image/png;')))return false;
