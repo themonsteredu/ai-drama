@@ -15,7 +15,7 @@ export async function POST(request:Request){
   const image=backgroundImageInput(body.image),mask=backgroundImageInput(body.mask,true);
   if(image.width!==1024||image.height!==1024||mask.width!==image.width||mask.height!==image.height)throw new SettingsError('그림과 보호 영역의 크기를 확인해 주세요.');
   const key=await savedApiKey(),form=new FormData();
-  form.set('model',IMAGE_MODEL);form.set('quality','low');form.set('size','1024x1024');form.set('n','1');form.set('output_format','jpeg');form.set('output_compression','85');
+  form.set('model',IMAGE_MODEL);form.set('quality','low');form.set('size','1024x1024');form.set('n','1');form.set('background','opaque');form.set('output_format','jpeg');form.set('output_compression','85');
   form.set('image[]',new Blob([new Uint8Array(image.bytes)],{type:image.mime}),image.mime==='image/jpeg'?'scene.jpg':'scene.png');
   form.set('mask',new Blob([new Uint8Array(mask.bytes)],{type:'image/png'}),'mask.png');
   form.set('prompt',backgroundEditPrompt(body.prompt,body.operation,body.strength==='gentle'?'gentle':'clear'));

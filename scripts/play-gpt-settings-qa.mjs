@@ -22,7 +22,7 @@ try{
   }
   assert(url.startsWith('https://api.openai.com/v1/'));providerCalls++;assert.equal(options.headers.Authorization,`Bearer ${testKey}`);
   if(providerStatus!==200)return Response.json({error:{message:'never expose provider secrets'}},{status:providerStatus});
-  if(url.endsWith('/images/edits')){lastImagePrompt=options.body.get('prompt');lastImageMime=options.body.get('image[]').type;assert.equal(options.body.get('model'),'gpt-image-2.5-flare');assert.equal(options.body.get('quality'),'low');assert.equal(options.body.get('n'),'1');assert.equal(options.body.get('size'),'1024x1024');assert.equal(options.body.get('mask').type,'image/png');return Response.json({data:[{b64_json:'YWJj'}]});}
+  if(url.endsWith('/images/edits')){lastImagePrompt=options.body.get('prompt');lastImageMime=options.body.get('image[]').type;assert.equal(options.body.get('model'),'gpt-image-2.5-flare');assert.equal(options.body.get('quality'),'low');assert.equal(options.body.get('background'),'opaque');assert.equal(options.body.get('n'),'1');assert.equal(options.body.get('size'),'1024x1024');assert.equal(options.body.get('mask').type,'image/png');return Response.json({data:[{b64_json:'YWJj'}]});}
   return Response.json({id:server.IMAGE_MODEL});
  };
  const req=(body,cookie='',origin='https://play.test')=>new Request('https://play.test/api/play-settings',{method:'POST',headers:{Origin:origin,Cookie:cookie,'Content-Type':'application/json'},body:JSON.stringify(body)});
@@ -47,7 +47,7 @@ try{
  const beforeInvalid=providerCalls;assert.equal((await images.POST(req({image:jpegSource,mask:jpegSource,prompt:'사진 속 배경'},otherCookie))).status,400);assert.equal(providerCalls,beforeInvalid,'masks still require PNG');
  const wrongSize=Buffer.from(jpg);wrongSize.writeUInt16BE(512,27);assert.equal((await images.POST(req({image:'data:image/jpeg;base64,'+wrongSize.toString('base64'),mask:source,prompt:'배경'},otherCookie))).status,400);assert.equal(providerCalls,beforeInvalid);
  assert.match(lastImagePrompt,/clearly visible improvement in the artistic finish/);assert.match(lastImagePrompt,/Never redraw a protected character/);
- const assertRefinement=()=>{assert.match(lastImagePrompt,/Keep the existing background elements and composition/);assert.match(lastImagePrompt,/type, count, position, relative size/);assert.match(lastImagePrompt,/Do not add, remove, duplicate, replace or rearrange/);assert.match(lastImagePrompt,/more beautifully and skillfully drawn/);assert(!lastImagePrompt.includes('Do not improve the drawing skill'));assert(!lastImagePrompt.includes('scenery additions'));};
+ const assertRefinement=()=>{assert.match(lastImagePrompt,/Keep the existing background elements and composition/);assert.match(lastImagePrompt,/type, count, position, relative size/);assert.match(lastImagePrompt,/Do not add, remove, duplicate, replace or rearrange/);assert.match(lastImagePrompt,/more beautifully and skillfully drawn/);assert(!lastImagePrompt.includes('Do not improve the drawing skill'));assert(!lastImagePrompt.includes('scenery additions'));assert.match(lastImagePrompt,/faint pencil lines/);assert.match(lastImagePrompt,/Refine EVERY existing background element/);assert.match(lastImagePrompt,/Do not fill light areas with black/);assert.match(lastImagePrompt,/complete OPAQUE illustration/);assert.match(lastImagePrompt,/do NOT request a transparent or removed background/);};
  assertRefinement();
  const {backgroundPresets}=load('./lib/background-prompt.js');
  for(const preset of backgroundPresets)for(const strength of ['gentle','clear']){

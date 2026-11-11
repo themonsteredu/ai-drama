@@ -3,7 +3,7 @@ import {useEffect,useRef,useState,type PointerEvent as ReactPointerEvent} from '
 import {bounded,drawingId,emptyDrawingProject,newDrawingScene,parseDrawingFile,DRAWING_FILE_LIMIT,type DrawingProject,type DrawingAsset,type DrawingItem,type DrawingScene} from '@/lib/drawing-project';
 import {DrawingMusicPlayer} from '@/lib/drawing-music';
 import {applyVoice,startVoiceRecording,VoicePlayer,VOICE_MAX_SECONDS,type VoiceSession} from '@/lib/drawing-voice';
-import {sceneSeconds,movieTimeline,VOICE_LEAD} from '@/lib/drawing-movie';
+import {sceneSeconds,movieTimeline} from '@/lib/drawing-movie';
 import {activeNarration} from '@/lib/film-narration';
 import {loadDrawing,saveDrawing} from '@/lib/drawing-storage';
 import {loadDrawingImages} from '@/lib/drawing-media';
@@ -114,14 +114,21 @@ export function useDrawingEditor(storageKey='active',initialProject=emptyDrawing
     const p=projectRef.current,next=p.scenes[index];
     if(!next){stop();return;}
     clock.current=0;setReset(n=>n+1);setValue({...p,activeSceneId:next.id});
-    musicPlayer.current??=new DrawingMusicPlayer();
-    musicPlayer.current.play({...p,activeSceneId:next.id},next,setError);
     const voice=next.voice,epoch=storyEpoch.current;
+    const current=()=>storyOn.current&&storyEpoch.current===epoch;
+    const begin=()=>{if(!current())return;setPlaying(true);musicPlayer.current??=new DrawingMusicPlayer();musicPlayer.current.play({...p,activeSceneId:next.id},next,setError);};
     if(voice){
+      setPlaying(false);setVoicePlaying(true);
       voicePlayer.current??=new VoicePlayer();
-      window.setTimeout(()=>{if(storyOn.current&&storyEpoch.current===epoch){setVoicePlaying(true);voicePlayer.current?.play(voice,setError,()=>setVoicePlaying(false));}},VOICE_LEAD*1000);
+      // Wait for actual playback to end, including buffering, instead of cutting speech with a wall-clock timer.
+      voicePlayer.current.play(voice,message=>{if(current()){setError(message);stop();}},()=>{
+        if(!current())return;setVoicePlaying(false);
+        const hold=Math.max(0,sceneSeconds(next)-voice.duration);
+        storyTimer.current=window.setTimeout(()=>{if(current())runScene(index+1);},hold*1000);
+      },begin);
+    }else{
+      setVoicePlaying(false);begin();storyTimer.current=window.setTimeout(()=>{if(current())runScene(index+1);},sceneSeconds(next)*1000);
     }
-    storyTimer.current=window.setTimeout(()=>runScene(index+1),sceneSeconds(next)*1000);
   }
   function playStory(){
     if(!loaded||recording||!project.scenes.length)return;

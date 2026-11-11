@@ -25,7 +25,7 @@ export function FilmNarrationPanel({e}:{e:ReturnType<typeof useDrawingEditor>}){
  return <section className="film-narration" aria-label="전체 녹음과 장면 전환">
   <header><div><h2>전체 대사와 장면 시간</h2><p>네 장면의 녹음을 파일 하나로 올려요.</p></div><button disabled={disabled} onClick={()=>file.current?.click()}>{uploading?'녹음 여는 중…':n?'전체 녹음 바꾸기':'전체 녹음 올리기'}</button></header>
   <input ref={file} type="file" hidden accept=".mp3,.m4a,.mp4,.wav,.aac,.ogg,.webm" aria-label="네 장면 전체 녹음 파일" onChange={event=>{const value=event.target.files?.[0];event.target.value='';if(value)void upload(value);}}/>
-  {!n?<p>최대 10분·40MB. 장면별 녹음 기능도 아래에서 사용할 수 있어요.</p>:<>
+  {!n?<p>네 장면의 대사가 하나로 이어진 파일이 있을 때 사용해요. 최대 10분·40MB.</p>:<>
    <label className="film-check"><input type="checkbox" checked={n.enabled} disabled={disabled} onChange={event=>{audio.current?.pause();e.commit(p=>({...p,narration:{...p.narration!,enabled:event.target.checked}}));}}/>전체 녹음으로 이어서 재생</label>
    {n.enabled?<>
     <div className="film-audio-choice"><label>사용할 목소리<select aria-label="사용할 목소리" value={n.useGenerated?'ai':'original'} disabled={disabled} onChange={event=>{audio.current?.pause();e.commit(p=>fitNarration({...p,narration:{...p.narration!,useGenerated:event.target.value==='ai'}}));setNotice('목소리 길이에 맞춰 장면 시간을 다시 나눴어요. 전환 지점을 확인해 주세요.');}}><option value="original">원본 녹음</option><option value="ai" disabled={!n.generated||n.generatedKey!==dialogueKey(n)}>AI 역할 목소리</option></select></label><button disabled={disabled} onClick={()=>{audio.current?.pause();setDialogue(true);}}>AI 배역·목소리 만들기</button></div>

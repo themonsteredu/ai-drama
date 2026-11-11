@@ -42,13 +42,13 @@ export function DrawingMovieDialog({project,onPlayStory,onClose}:Props){
  }
  return <dialog ref={dialog} className="movie-dialog" aria-labelledby="movie-title" onCancel={event=>{if(busy)event.preventDefault();else onClose();}} onClick={event=>{if(event.target===event.currentTarget)close();}}>
   <div className="movie-content">
-   <header><div><h2 id="movie-title">🎬 영상 만들기</h2><p>장면이 차례로 넘어가며 음악과 목소리가 함께 나와요.</p></div><button type="button" aria-label="영상 창 닫기" disabled={busy} onClick={close}>×</button></header>
+   <header><div><h2 id="movie-title">🎬 영상 만들기</h2><p>{narration?'전체 녹음과 정한 장면 시간에 맞춰 이어져요.':'장면별 녹음 길이에 맞춰 대사가 끝나면 다음 장면으로 넘어가요.'}</p></div><button type="button" aria-label="영상 창 닫기" disabled={busy} onClick={close}>×</button></header>
 
    <ul className="movie-scenes" aria-label="장면 차례">
     {movieTimeline(project).map(({scene,seconds},index)=><li key={scene.id}>
      <b>{String(index+1).padStart(2,'0')}</b>
      <span>{scene.title}</span>
-     <small>{narration?'전체 녹음 이어짐':scene.voice?`목소리 ${Math.max(1,Math.round(scene.voice.duration))}초`:'목소리 없음'} · {Number(seconds.toFixed(1))}초</small>
+     <small>{narration?'전체 녹음 이어짐':scene.voice?`목소리 ${Number(scene.voice.duration.toFixed(2))}초`:'목소리 없음'} · {Number(seconds.toFixed(1))}초</small>
     </li>)}
    </ul>
    <p className="movie-total">모두 <b>{clockLabel(total)}</b>짜리 이야기예요. {narration?`전체 녹음 하나로 이어져요.${project.narration?.useGenerated?' AI가 만든 목소리예요.':''}`:`목소리를 담은 장면은 ${withVoice} / ${project.scenes.length}개예요.`}</p>

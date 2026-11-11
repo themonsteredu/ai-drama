@@ -3,11 +3,11 @@ import {drawDrawingScene,DRAW_WIDTH,DRAW_HEIGHT,type RasterCache} from './drawin
 import {effectiveMusic,synthMusic} from './drawing-music';
 import {activeNarration,narrationDurations} from './film-narration';
 
-/** A scene lasts as long as its voice, plus a breath. Silent scenes get a readable default. */
-export const SCENE_PAD=.7,SCENE_MIN=2.5,SCENE_SILENT=4,VOICE_LEAD=.25;
+/** Automatic scenes start with their recording and cut when that recording ends. */
+export const SCENE_PAD=0,SCENE_MIN=2.5,SCENE_SILENT=4,VOICE_LEAD=0;
 export function sceneSeconds(scene:DrawingScene){
- const minimum=Math.max(SCENE_MIN,scene.voice?scene.voice.duration+VOICE_LEAD:0);
- return Math.max(minimum,scene.durationSeconds??(scene.voice?scene.voice.duration+VOICE_LEAD+SCENE_PAD:SCENE_SILENT));
+ const minimum=scene.voice?scene.voice.duration:SCENE_MIN;
+ return Math.max(minimum,scene.durationSeconds??scene.voice?.duration??SCENE_SILENT);
 }
 export function movieTimeline(project:DrawingProject){
  const durations=narrationDurations(project);let at=0;
@@ -170,7 +170,7 @@ export async function recordMovie(project:DrawingProject,images:RasterCache,onPr
   // One blob, no timeslice: asking for chunks makes Chrome drop the header's Duration
   // field altogether, and the saved movie then reports no length at all.
   recorder.start();
-  const base=context.currentTime+.15;
+  const base=context.currentTime;
   // Adjacent scenes with the same soundtrack share one source, so music never restarts at each cut.
   const musicRuns:{music:NonNullable<ReturnType<typeof musicSource>>;at:number;seconds:number}[]=[];
   for(const step of plan){
@@ -191,12 +191,12 @@ export async function recordMovie(project:DrawingProject,images:RasterCache,onPr
    }
   }
 
-  const startedAt=performance.now()+150;
   await new Promise<void>((resolve,reject)=>{
    let frame=0;
    const paint=()=>{
     if(canceled()){cancelAnimationFrame(frame);reject(new Error('영상 만들기를 그만두었어요.'));return;}
-    const elapsed=(performance.now()-startedAt)/1000;
+    // Use the same clock that schedules the dialogue; rendering delays must not advance the cut early.
+    const elapsed=context.currentTime-base;
     if(elapsed>=total){resolve();return;}
     const index=Math.max(0,plan.findIndex(step=>elapsed<step.at+step.seconds));
     const step=plan[index<0?plan.length-1:index];

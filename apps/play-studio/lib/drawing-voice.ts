@@ -38,10 +38,11 @@ export function validateVoices(p:Record<string,unknown>):boolean{
 }
 export function sceneVoice(scene:DrawingScene){return scene.voice??null;}
 export function applyVoice(p:DrawingProject,sceneId:string,voice:DrawingVoice|null):DrawingProject{
- const next={...p,scenes:p.scenes.map(s=>{
+ if(!p.scenes.some(s=>s.id===sceneId))return p;
+ const next={...p,...(voice&&p.narration?{narration:{...p.narration,enabled:false}}:{}),scenes:p.scenes.map(s=>{
   if(s.id!==sceneId)return s;
   const copy={...s};
-  if(voice)copy.voice=voice;else delete copy.voice;
+  if(voice){copy.voice=voice;delete copy.durationSeconds;}else delete copy.voice;
   return copy;
  })};
  if(voiceBytes(next)>VOICE_TOTAL_LIMIT)throw new Error('담은 목소리가 모두 합쳐 32MB를 넘어요. 다른 장면의 목소리를 지우고 다시 담아 주세요.');
