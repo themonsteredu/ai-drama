@@ -1,0 +1,148 @@
+/* A persistent editor: picture tools, stage/audio and motion tools share the viewport. */
+.draw-picture-tools{padding:14px 16px;border-bottom:1px solid var(--draw-line)}
+.draw-picture-tools h2{margin:0 0 10px;font-size:16px}
+.draw-stage-status{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.draw-stage-status .draw-stage-hint{margin:5px 0;min-width:0}
+.draw-stage-status .draw-destination-done{flex-shrink:0;min-height:40px;background:#fff5d8;border-color:#d3a532;font-weight:700}
+.draw-scenes em{font-style:normal;font-size:12px;color:#5d7387}
+.draw-voice .draw-voice-head{align-items:center;flex-wrap:wrap;gap:5px 12px}
+.draw-voice .draw-voice-head h2{font-size:15px;margin:0;white-space:nowrap}
+.draw-voice .draw-voice-head p{font-size:13px;margin:0}
+.draw-voice .draw-voice-head strong{margin-left:auto;font-size:13px}
+.draw-voice-main-actions{display:flex;gap:6px;flex-wrap:wrap}
+.draw-voice-main-actions .draw-voice-upload{width:auto;flex:1;min-width:130px}
+.draw-voice-main-actions>button{min-height:40px;padding:6px 10px;font-size:13px}
+.draw-voice-main-actions .recording{background:#b94335;color:white}
+.draw-voice-timing{display:flex;align-items:center;flex-wrap:wrap;gap:4px 12px;min-height:28px}
+.draw-voice-timing small{font-size:11px;color:#796e64;margin-left:auto}
+.draw-voice-timing .draw-scene-auto{font-size:13px;margin:0}
+.draw-voice-timing .draw-scene-duration{font-size:13px;display:flex;gap:6px;align-items:center}
+.draw-voice-timing .draw-scene-duration input{width:72px!important;min-height:34px!important;padding:4px 7px!important;margin:0!important}
+.draw-scene-audio-finish{gap:6px}
+.draw-voice .draw-scene-audio-finish>button{font-size:12px;min-height:38px;padding:6px 8px}
+.draw-narration-dialog{width:min(900px,96vw);max-height:92dvh;padding:18px;border:1px solid #dce5df;border-radius:16px;color:var(--draw-ink)}
+.draw-narration-dialog::backdrop{background:#1b2e4666}
+.draw-narration-dialog>header{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.draw-narration-dialog>header h2{font-size:18px;margin:0}
+.draw-narration-dialog .film-narration{margin-bottom:0}
+@media(min-width:760px){
+ .story-studio:not(.story-presenting){height:100dvh;min-height:0;display:flex;flex-direction:column;overflow:hidden}
+ .story-studio:not(.story-presenting) .story-header{flex:0 0 auto;width:100%;max-width:none;gap:8px 16px;padding:8px 14px;min-height:52px;flex-wrap:wrap}
+ .story-studio .story-wordmark{font-size:23px}
+ .story-studio .story-mint,.story-studio .story-road,.story-studio .story-ending{display:none}
+ .story-studio .story-header-actions{gap:5px;margin-left:auto;flex-wrap:wrap}
+ .story-studio .story-header-actions button,.story-studio .story-header-actions a{font-size:12px;min-height:36px;padding:7px 9px;border-radius:8px}
+ .story-studio .story-project-row{flex:0 0 auto;position:static;padding:5px 14px;gap:8px;flex-wrap:nowrap;min-height:44px}
+ .story-studio .story-project-row .draw-title{gap:6px;display:flex}
+ .story-studio .story-project-row .draw-title input{font-size:15px;max-width:330px;padding:5px!important}
+ .story-studio .story-project-row .draw-history{flex-wrap:nowrap}
+ .story-studio .story-project-row .draw-history button{min-height:34px;padding:4px 8px;font-size:12px}
+ .story-studio .draw-alert{flex:0 0 auto;padding:5px 14px}
+ .story-studio .story-mobile-tabs,.story-studio .draw-phone-picture-tools{display:none}
+ .story-studio:not(.story-presenting) .draw-workspace{flex:1;min-height:0;width:100%;max-width:none;margin:0;padding:8px 10px;gap:10px;display:grid;grid-template-columns:190px minmax(0,1fr) 252px;align-items:stretch;overflow:hidden}
+ .story-studio .story-library-column,.story-studio .draw-controls{min-height:0;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;border-radius:12px}
+ .story-studio:not(.story-presenting) .story-library-column{display:block!important}
+ .story-studio .draw-picture-tools{padding:10px}
+ .story-studio .draw-picture-tools h2{font-size:15px;margin-bottom:6px}
+ .story-studio .draw-film-tools{margin:0;padding:0;border:0}
+ .story-studio .draw-scene-upload,.story-studio .draw-scene-rotation{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin:0 0 6px}
+ .story-studio .draw-scene-upload>span,.story-studio .draw-scene-rotation>strong{display:none}
+ .story-studio .draw-scene-upload button,.story-studio .draw-scene-rotation button,.story-studio .draw-film-buttons button{min-height:40px;padding:6px;font-size:12px;line-height:1.45}
+ .story-studio .draw-scene-upload button:first-child,.story-studio .draw-scene-rotation button:last-child{grid-column:1/-1}
+ .story-studio .draw-scene-upload button:nth-child(2){grid-column:1/-1;min-height:32px}
+ .story-studio .draw-film-buttons{display:grid;gap:5px}
+ .story-studio .draw-film-buttons button{width:100%;flex:auto}
+ .story-studio .draw-library{padding:10px}
+ .story-studio .draw-section-title small,.story-studio .draw-privacy{display:none}
+ .story-studio .draw-library .draw-section-title h2{font-size:14px;margin:0 0 6px}
+ .story-studio .story-extra-tools{margin:4px 0}
+ .story-studio .story-extra-tools>summary{font-size:13px;padding:7px 0}
+ .story-studio .draw-library-title{margin:8px 0;font-size:13px}
+ .story-studio .draw-asset-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;display:grid;overflow:visible}
+ .story-studio .draw-asset .draw-checker{height:50px}
+ .story-studio .draw-asset strong{font-size:12px}
+ .story-studio .cutout-reedit,.story-studio .draw-delete-asset{font-size:11px;min-height:32px;padding:4px}
+ .story-studio:not(.story-presenting) .draw-stage-column{min-height:0;display:flex!important;flex-direction:column;padding:0;overflow:auto;scrollbar-width:thin}
+ .story-studio .draw-scenes{flex:0 0 auto;gap:6px;margin:0;padding:0 0 4px;overflow-x:auto}
+ .story-studio .draw-scenes>button{flex:1 0 75px;max-width:130px;min-height:58px;display:flex;align-items:center;gap:5px;padding:4px;border-radius:9px}
+ .story-studio .draw-scenes>button>img,.story-studio .story-thumb-empty{width:35%;aspect-ratio:1;object-fit:contain;border-radius:4px}
+ .story-studio .draw-scenes>button>span{padding:0;display:flex;flex-direction:column;align-items:flex-start;gap:1px;font-size:12px;line-height:1.4;white-space:nowrap}
+ .story-studio .draw-scenes small{display:none}
+ .story-studio .draw-scenes em{font-size:11px}
+ .story-studio .draw-scenes .story-add-scene{flex:0 0 60px;font-size:11px;gap:0}
+ .story-studio .story-add-scene b{font-size:22px;line-height:1}
+ .story-studio .draw-stage-heading{flex:0 0 auto;margin:2px 0;height:26px;gap:6px}
+ .story-studio .draw-stage-heading small{display:none}
+ .story-studio .draw-stage-heading h1{font-size:14px;margin:0}
+ .story-studio:not(.story-presenting) .draw-stage-frame{flex:1;min-height:130px;display:grid;place-items:center;border-width:2px;border-radius:12px;box-shadow:none;background:#edf2f7}
+ .story-studio .draw-canvas-wrap{max-width:100%;margin:auto}
+ .story-studio .draw-stage-empty>div{max-width:100%;text-align:center}
+ .story-studio .draw-stage-empty strong{font-size:17px}
+ .story-studio .draw-stage-empty small,.story-studio .draw-stage-empty p{display:none}
+ .story-studio .story-start-button{margin-top:10px}
+ .story-studio .draw-stage-status{flex:0 0 auto;min-height:26px}
+ .story-studio .draw-stage-hint{font-size:12px;margin:3px 0;min-height:0}
+ .story-studio .draw-stage-status .draw-destination-done{min-height:34px;font-size:12px;padding:5px 10px}
+ .story-studio .draw-playbar{flex:0 0 auto;margin:3px 0;gap:6px;flex-wrap:nowrap}
+ .story-studio .draw-playbar>span{display:none}
+ .story-studio .draw-playbar>button,.story-studio .draw-playbar .draw-primary{flex:1;min-height:40px;padding:7px 9px;font-size:13px;white-space:nowrap;box-shadow:none;border-radius:9px}
+ .story-studio .draw-stage-items{flex:0 0 auto;flex-wrap:nowrap;overflow-x:auto;margin:2px 0;gap:5px}
+ .story-studio .draw-stage-items:empty{display:none}
+ .story-studio .draw-stage-items button{flex-shrink:0;min-height:30px;font-size:12px;padding:4px 9px}
+ .story-studio .draw-voice{flex:0 0 auto;margin:5px 0 0;padding:8px 10px;gap:6px;border-width:1px;border-radius:12px}
+ .story-studio .draw-voice-main-actions .draw-voice-upload{font-size:13px;min-height:38px}
+ .story-studio .draw-scene-settings{flex:0 0 auto;margin:3px 0 0;padding:0}
+ .story-studio .draw-scene-settings summary{padding:4px 0;font-size:12px}
+ .story-studio:not(.story-presenting) .draw-controls{display:block!important;grid-column:auto;padding:10px}
+ .story-studio .draw-controls .draw-section-title h2{font-size:15px;margin:0 0 6px}
+ .story-studio .draw-controls .story-section-number{display:none}
+ .story-studio .story-selected{padding:5px 8px;margin:0 0 5px;min-height:38px;font-size:13px}
+ .story-studio .story-selected img{width:28px;height:30px}
+ .story-studio .draw-remove-selected{min-height:30px;margin:3px 0 5px;padding:4px;font-size:12px}
+ .story-studio .draw-motion-grid{gap:5px;margin-top:5px}
+ .story-studio .draw-motion-grid button{min-height:43px;flex-direction:row;gap:4px;font-size:12px;padding:5px 4px;border-radius:8px}
+ .story-studio .story-motion span{font-size:17px}
+ .story-studio .draw-controls>.draw-help{display:none}
+ .story-studio .draw-action-preview{display:none}
+ .story-studio .draw-controls .draw-destination{min-height:42px;margin:6px 0 0;font-size:13px}
+ .story-studio .draw-controls>.draw-pair{margin-top:5px;gap:5px}
+ .story-studio .draw-controls>.draw-pair button{min-height:36px;padding:5px;font-size:12px}
+ .story-studio .draw-controls>.draw-text-button{min-height:26px;font-size:12px}
+ .story-studio .draw-controls fieldset{margin:6px 0}
+ .story-studio .draw-controls legend{font-size:12px;margin-bottom:4px}
+ .story-studio .draw-controls .draw-trio{gap:5px}
+ .story-studio .draw-controls .draw-trio button{min-height:36px;font-size:12px;padding:5px 3px}
+ .story-studio .draw-controls>details{margin:3px 0;border-top:1px solid #e7edf3}
+ .story-studio .draw-controls>details>summary{font-size:13px;padding:7px 0;min-height:34px}
+ .story-studio .draw-weather{margin-top:6px;padding-top:7px}
+ .story-studio .draw-weather h3{font-size:13px;margin:0 0 5px}
+ .story-studio .draw-weather-grid{max-width:none;gap:4px}
+ .story-studio .draw-weather-grid button{min-height:39px;display:flex;flex-direction:row;justify-content:center;align-items:center;gap:4px;padding:4px;font-size:12px}
+ .story-studio .draw-weather-grid button span{font-size:15px}
+ .story-studio:not(.story-presenting)>.draw-footer{display:none}
+ .story-studio .story-action-empty{padding:15px 6px}
+ .story-presenting .draw-stage-frame{height:min(70dvh,650px);display:grid;place-items:center}
+ .story-presenting .draw-voice,.story-presenting .draw-phone-picture-tools{display:none}
+}
+@media(min-width:760px) and (max-width:1100px){
+ .story-studio:not(.story-presenting) .draw-workspace{grid-template-columns:154px minmax(0,1fr) 216px;gap:7px;padding:7px}
+ .story-studio .draw-controls,.story-studio .draw-picture-tools,.story-studio .draw-library{padding:8px}
+ .story-studio .draw-scenes>button{flex-basis:72px}
+ .story-studio .draw-scenes>button>img,.story-studio .story-thumb-empty{display:none}
+ .story-studio .draw-scenes .story-add-scene{flex-basis:48px}
+ .story-studio .draw-playbar>button,.story-studio .draw-playbar .draw-primary{font-size:12px;padding:7px 5px}
+ .story-studio .draw-voice-head strong{font-size:12px}
+ .story-studio .draw-voice-timing small{display:none}
+ .story-studio .draw-scene-audio-finish>button{font-size:12px;padding:5px 6px}
+ .story-studio .draw-motion-grid button{font-size:12px}
+ .story-studio .draw-motion-grid .story-motion span{display:none}
+}
+@media(max-width:759px){
+ .story-library-column>.draw-picture-tools{display:none}
+ .draw-phone-picture-tools{display:block}
+ .story-studio .draw-voice{padding:10px;gap:8px}
+ .draw-voice .draw-voice-head{display:flex}
+ .draw-voice .draw-voice-head strong{margin-left:0}
+ .draw-stage-status .draw-destination-done{font-size:12px}
+ .draw-voice .draw-scene-audio-finish>button{flex:1}
+}

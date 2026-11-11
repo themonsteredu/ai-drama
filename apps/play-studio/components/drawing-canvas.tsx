@@ -7,7 +7,15 @@ import {newSpeechView,rememberSpeechView,clearSpeechLayoutCache,type SpeechBubbl
 import './drawing-speech.css';
 type Props={project:DrawingProject;scene:DrawingScene;playing:boolean;reset:number;selectedId?:string;clock:MutableRefObject<number>;onError:(text:string)=>void;onDown:(e:ReactPointerEvent<HTMLCanvasElement>)=>void;onMove:(e:ReactPointerEvent<HTMLCanvasElement>)=>void;onUp:(e:ReactPointerEvent<HTMLCanvasElement>)=>void;onCancel:()=>void};
 export function DrawingCanvas({project,scene,playing,reset,selectedId,clock,onError,onDown,onMove,onUp,onCancel}:Props){
- const canvas=useRef<HTMLCanvasElement>(null),view=useRef(newSpeechView());
+ const canvas=useRef<HTMLCanvasElement>(null),wrap=useRef<HTMLDivElement>(null),view=useRef(newSpeechView());
+ const [fittedWidth,setFittedWidth]=useState<number>();
+ useEffect(()=>{
+  const parent=wrap.current?.parentElement;if(!parent)return;
+  const wide=window.matchMedia('(min-width:760px)');
+  const fit=()=>setFittedWidth(wide.matches?Math.max(1,Math.min(parent.clientWidth,parent.clientHeight*DRAW_WIDTH/DRAW_HEIGHT)):undefined);
+  const observer=new ResizeObserver(fit);observer.observe(parent);wide.addEventListener('change',fit);fit();
+  return()=>{observer.disconnect();wide.removeEventListener('change',fit);};
+ },[]);
  const [images,setImages]=useState<RasterCache>(new Map()),[bubbles,setBubbles]=useState<SpeechBubble[]>([]),[revision,setRevision]=useState(0);
  useEffect(()=>{let canceled=false;void loadDrawingImages(project.assets).then(result=>{if(!canceled)setImages(result);}).catch(error=>{if(!canceled)onError(error instanceof Error?error.message:'그림을 읽지 못했어요.');});return()=>{canceled=true;};},[project.assets,onError]);
  useEffect(()=>{clock.current=0;},[reset,clock]);
@@ -39,7 +47,7 @@ export function DrawingCanvas({project,scene,playing,reset,selectedId,clock,onEr
   paint(performance.now());return()=>{canceled=true;cancelAnimationFrame(raf);};
  },[project,scene,images,playing,reset,selectedId,clock,revision]);
  function turn(bubble:SpeechBubble,offset:number){view.current.cursors.set(bubble.id,{text:bubble.text,offset});setRevision(n=>n+1);}
- return <div className="draw-canvas-wrap"><canvas ref={canvas} width={DRAW_WIDTH} height={DRAW_HEIGHT} className="draw-canvas" aria-label="내 그림 무대. 아래 그림 목록에서 선택한 뒤 위치를 바꿀 수 있어요." onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onCancel}>그림을 움직이는 무대입니다.</canvas>
+ return <div ref={wrap} className="draw-canvas-wrap" style={fittedWidth?{width:fittedWidth}:undefined}><canvas ref={canvas} width={DRAW_WIDTH} height={DRAW_HEIGHT} className="draw-canvas" aria-label="내 그림 무대. 아래 그림 목록에서 선택한 뒤 위치를 바꿀 수 있어요." onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onCancel}>그림을 움직이는 무대입니다.</canvas>
  <div className="drawing-speech-layer">{bubbles.map(b=><div key={b.id} className="drawing-speech-box" data-speaker={b.id} data-page={b.page+1} data-pages={b.pages} style={{left:`${b.x/DRAW_WIDTH*100}%`,top:`${b.y/DRAW_HEIGHT*100}%`,width:`${b.width/DRAW_WIDTH*100}%`,height:`${b.height/DRAW_HEIGHT*100}%`}}>
   <p className="drawing-speech-readable">{b.name}: {b.displayText}</p>
   {b.pages>1?<div className="drawing-speech-pager" role="group" aria-label={`${b.name} 말풍선 넘기기`} style={{height:`${b.footer/b.height*100}%`}}>

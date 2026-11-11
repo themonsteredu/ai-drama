@@ -7,7 +7,7 @@ import type {useDrawingEditor} from './use-drawing-editor';
 import {FilmDialogueDialog} from './film-dialogue-dialog';
 import './film-narration.css';
 const precise=(n:number)=>`${Math.floor(n/60)}:${(n%60).toFixed(1).padStart(4,'0')}`;
-export function FilmNarrationPanel({e}:{e:ReturnType<typeof useDrawingEditor>}){
+export function FilmNarrationPanel({e,onPreview}:{e:ReturnType<typeof useDrawingEditor>;onPreview?:()=>void}){
  const file=useRef<HTMLInputElement>(null),audio=useRef<HTMLAudioElement>(null),lock=useRef(false);
  const [uploading,setUploading]=useState(false),[dialogue,setDialogue]=useState(false),[time,setTime]=useState(0),[notice,setNotice]=useState('');
  const n=e.project.narration,voice=activeNarration(e.project),plan=movieTimeline(e.project),disabled=!e.loaded||e.busy||e.recording||uploading||e.playing;
@@ -32,7 +32,7 @@ export function FilmNarrationPanel({e}:{e:ReturnType<typeof useDrawingEditor>}){
     <audio key={voice?.id} ref={audio} controls src={voice?.source} onTimeUpdate={()=>setTime(audio.current?.currentTime??0)} onPlay={()=>e.stop()} aria-label="전체 녹음 듣기"/>
     <p>재생 위치 <b>{precise(time)}</b> / {clockLabel(voice?.duration??0)}{n.useGenerated?' · AI가 만든 목소리':''}</p>
     <div className="film-timeline" aria-label="장면 전환 시간표">{plan.map((step,index)=><div className="film-time-row" key={step.scene.id}><strong>{index+1}. {step.scene.title}</strong><span>{precise(step.at)}–{precise(step.at+step.seconds)}</span><label>길이<input key={`${step.scene.id}-${step.seconds}`} aria-label={`${index+1}장면 길이 초`} type="number" min="1" max="600" step="0.1" defaultValue={Number(step.seconds.toFixed(2))} disabled={disabled} onBlur={event=>{const value=Math.max(1,Math.min(600,Number(event.target.value)||1));if(Math.abs(value-step.seconds)>.005){audio.current?.pause();e.commit(p=>({...p,narration:{...p.narration!,durations:{...p.narration!.durations,[step.scene.id]:value}}}));}}}/>초</label>{index>0?<button disabled={disabled} onClick={()=>boundary(index)}>지금부터 {index+1}장면</button>:<span>처음부터 시작</span>}</div>)}</div>
-    <div className="film-narration-actions"><button disabled={disabled} onClick={()=>{audio.current?.pause();e.commit(p=>fitNarration(p));setNotice('녹음 길이를 장면 수에 맞춰 고르게 나눴어요.');}}>장면 시간 고르게 나누기</button><button disabled={!e.loaded||e.recording||uploading} onClick={()=>{audio.current?.pause();e.storyPlaying?e.stop():e.playStory();}}>{e.storyPlaying?'전체 재생 멈추기':'처음부터 전체 미리보기'}</button></div>
+    <div className="film-narration-actions"><button disabled={disabled} onClick={()=>{audio.current?.pause();e.commit(p=>fitNarration(p));setNotice('녹음 길이를 장면 수에 맞춰 고르게 나눴어요.');}}>장면 시간 고르게 나누기</button><button disabled={!e.loaded||e.recording||uploading} onClick={()=>{audio.current?.pause();if(e.storyPlaying)e.stop();else if(onPreview)onPreview();else e.playStory();}}>{e.storyPlaying?'전체 재생 멈추기':'처음부터 전체 미리보기'}</button></div>
     <p>녹음을 들으며 ‘지금부터 다음 장면’을 누르거나 길이를 직접 바꾸세요. 마지막 장면은 남은 대사가 끝날 때까지 유지돼요.</p>
    </>:<p>현재는 기존 장면별 녹음을 사용해요. 전체 녹음은 보관돼 있어요.</p>}
    {notice?<p role="status">{notice}</p>:null}

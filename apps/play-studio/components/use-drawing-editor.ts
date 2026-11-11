@@ -75,8 +75,20 @@ export function useDrawingEditor(storageKey='active',initialProject=emptyDrawing
   function newWork(){if(!confirm('새 작품을 시작할까요? 지금 작품은 먼저 작품 파일로 보관해 주세요.'))return;setBlocked(false);setError('');commit(()=>({...initialProject(),id:drawingId('project')}));setSelectedId(undefined);setDestination(false);}
   function point(e:ReactPointerEvent<HTMLCanvasElement>){const r=e.currentTarget.getBoundingClientRect();return {x:bounded((e.clientX-r.left)/r.width*100,0,100),y:bounded((e.clientY-r.top)/r.height*100,0,100)};}
   function down(e:ReactPointerEvent<HTMLCanvasElement>){
-    if(!loaded||playing)return;const pos=point(e);
-    if(destination&&selected&&selectedAsset){const target=safeItemPoint(selected,selectedAsset,pos);patchItem({target,motion:selected.motion==='still'?'move':selected.motion});setDestination(false);return;}
+    if(!loaded||playing||busy||recording||!e.isPrimary||e.button!==0)return;const pos=point(e);
+    if(destination&&selected&&selectedAsset){
+      e.preventDefault();drag.current=null;const id=selected.id;
+      // Keep picking until the user finishes: each tap replaces only this actor's
+      // destination, so a second tap never deselects or drags the original drawing.
+      commit(p=>{
+        const active=p.scenes.find(s=>s.id===p.activeSceneId),item=active?.items.find(i=>i.id===id),asset=p.assets.find(a=>a.id===item?.assetId);
+        if(!active||!item||!asset)return p;
+        const target=safeItemPoint(item,asset,pos),motion=item.motion==='still'?'move':item.motion;
+        if(item.target?.x===target.x&&item.target?.y===target.y&&item.motion===motion)return p;
+        return {...p,scenes:p.scenes.map(s=>s.id===active.id?{...s,items:s.items.map(i=>i.id===id?{...i,target,motion}:i)}:s)};
+      });
+      return;
+    }
     if(clock.current>0){stop();return;}
     const item=hitDrawing(project,scene,pos.x,pos.y);setSelectedId(item?.id);if(!item)return;e.preventDefault();e.currentTarget.setPointerCapture(e.pointerId);drag.current={id:item.id,pointerId:e.pointerId,dx:pos.x-item.x,dy:pos.y-item.y,start:projectRef.current,moved:false};
   }
