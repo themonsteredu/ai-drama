@@ -1,4 +1,4 @@
-import {drawingId,validateDrawingProject,type DrawingProject,type DrawingScene,type DrawingItem} from './drawing-project';
+import {bounded,drawingId,validateDrawingProject,type DrawingProject,type DrawingScene,type DrawingItem} from './drawing-project';
 import {rasterImage} from './drawing-media';
 import {characterRemovalMask,seedCharacterBackground,characterRemovalChanged} from './scene-character-fill';
 
@@ -7,7 +7,7 @@ export function prepareCharacterRemoval(image:HTMLImageElement,selection:HTMLCan
  const canvas=document.createElement('canvas');canvas.width=selection.width;canvas.height=selection.height;
  const ctx=canvas.getContext('2d',{willReadFrequently:true})!;ctx.drawImage(image,0,0,canvas.width,canvas.height);
  const pixels=ctx.getImageData(0,0,canvas.width,canvas.height),marks=selection.getContext('2d')!.getImageData(0,0,canvas.width,canvas.height);
- const expanded=characterRemovalMask(marks.data,canvas.width,canvas.height,Math.max(1,Math.round(Math.max(canvas.width,canvas.height)/512)));
+ const expanded=characterRemovalMask(marks.data,canvas.width,canvas.height,Math.max(2,Math.round(Math.max(canvas.width,canvas.height)/256)));
  pixels.data.set(seedCharacterBackground(pixels.data,expanded,canvas.width,canvas.height));ctx.putImageData(pixels,0,0);
  const mask=document.createElement('canvas');mask.width=canvas.width;mask.height=canvas.height;
  const mc=mask.getContext('2d')!,data=mc.createImageData(mask.width,mask.height);
@@ -20,7 +20,7 @@ export async function verifyCharacterRemoval(original:string,background:string,s
  canvas.width=selection.width;canvas.height=selection.height;const ctx=canvas.getContext('2d',{willReadFrequently:true})!;
  ctx.drawImage(a,0,0,canvas.width,canvas.height);const before=ctx.getImageData(0,0,canvas.width,canvas.height).data;
  ctx.clearRect(0,0,canvas.width,canvas.height);ctx.drawImage(b,0,0,canvas.width,canvas.height);
- if(!characterRemovalChanged(before,ctx.getImageData(0,0,canvas.width,canvas.height).data,selection.getContext('2d')!.getImageData(0,0,canvas.width,canvas.height).data))throw new Error('선택한 주인공이 배경에서 지워지지 않았어요. 표시 범위를 확인하고 다시 생성해 주세요. 인물을 추가하지 않았어요.');
+ if(!characterRemovalChanged(before,ctx.getImageData(0,0,canvas.width,canvas.height).data,selection.getContext('2d')!.getImageData(0,0,canvas.width,canvas.height).data,canvas.width))throw new Error('주인공 선이 아직 남아 있어요. 얼굴·몸·팔·다리를 모두 칠한 뒤 ‘분리 미리보기’를 눌러 주세요. 인물은 추가하지 않았어요.');
 }
 
 /** Repair an old duplicate without inserting another actor or touching its motion/audio. */
@@ -68,13 +68,34 @@ export function actorPlacement(scene:DrawingScene,cut:{left:number;top:number;wi
  return {x,y,width};
 }
 
-export async function separateSceneCharacter(project:DrawingProject,sceneId:string,selection:string,background:string,name:string){
- const scene=project.scenes.find(s=>s.id===sceneId),original=project.assets.find(a=>a.id===scene?.backgroundAssetId);
+export function applySeparatedCharacter(project:DrawingProject,sceneId:string,selection:string,background:string,name:string,cut:{source:string;width:number;height:number;left:number;top:number;fullWidth:number;fullHeight:number},existingItemId?:string){
+ const scene=project.scenes.find(s=>s.id===sceneId),existing=scene?.items.find(i=>i.id===existingItemId),original=project.assets.find(a=>a.id===(existing?.separation?.sourceAssetId??scene?.backgroundAssetId));
  if(!scene||!original)throw new Error('장면 그림을 먼저 올려 주세요.');
- const cut=await cutSceneCharacter(original.source,selection),actorId=drawingId('scene-actor'),backgroundId=drawingId('scene-clean');
- const item:DrawingItem={id:drawingId('drawing'),assetId:actorId,...actorPlacement(scene,cut),rotation:0,flipped:false,motion:'still',speed:'normal',speech:''};
+ if(existingItemId&&!existing?.separation)throw new Error('고칠 주인공을 다시 선택해 주세요.');
+ const actorId=drawingId('scene-actor'),backgroundId=drawingId('scene-clean'),oldAsset=project.assets.find(a=>a.id===existing?.assetId);
+ const item:DrawingItem={id:drawingId('drawing'),...actorPlacement(scene,cut),rotation:0,flipped:false,motion:'still',speed:'normal',speech:'',...existing,assetId:actorId,separation:{sourceAssetId:original.id,mask:selection},...(existing&&oldAsset?{width:bounded(existing.width*cut.width/oldAsset.width,.1,100)}:{})};
  const assets=[...project.assets,{id:actorId,name:name.trim().slice(0,40)||'주인공',kind:'person' as const,source:cut.source,width:cut.width,height:cut.height},{id:backgroundId,name:`${scene.title} 빈 배경`.slice(0,40),kind:'background' as const,source:background,width:cut.fullWidth,height:cut.fullHeight}];
- const next={...project,assets,scenes:project.scenes.map(s=>s.id!==sceneId?s:{...s,backgroundAssetId:backgroundId,stillOriginalAssetId:backgroundId,protectedMask:undefined,items:[...s.items,item]})};
+ const scenes=project.scenes.map(s=>s.id!==sceneId?s:{...s,backgroundAssetId:backgroundId,stillOriginalAssetId:backgroundId,protectedMask:undefined,items:existing?s.items.map(i=>i.id===existing.id?item:i):[...s.items,item]});
+ const used=new Set(scenes.flatMap(s=>[s.backgroundAssetId,s.stillOriginalAssetId,...s.items.flatMap(i=>[i.assetId,i.separation?.sourceAssetId])]));
+ const next={...project,assets:assets.filter(a=>used.has(a.id)||!/^scene-(actor|clean)-/.test(a.id)),scenes};
  if(!validateDrawingProject(next))throw new Error('작품 보관 용량이 부족해요. 원본은 그대로 보관했어요.');
  return {project:next,itemId:item.id};
+}
+
+export async function separateSceneCharacter(project:DrawingProject,sceneId:string,selection:string,background:string,name:string,existingItemId?:string){
+ const scene=project.scenes.find(s=>s.id===sceneId),existing=scene?.items.find(i=>i.id===existingItemId),source=project.assets.find(a=>a.id===(existing?.separation?.sourceAssetId??scene?.backgroundAssetId));
+ if(!source)throw new Error('장면 그림을 먼저 올려 주세요.');
+ return applySeparatedCharacter(project,sceneId,selection,background,name,await cutSceneCharacter(source.source,selection),existingItemId);
+}
+
+/** Restore only this actor's previous selection; keep other already separated actors erased. */
+export async function restoreCharacterSelection(current:string,original:string,selection:string){
+ const [base,source,mask]=await Promise.all([rasterImage(current),rasterImage(original),rasterImage(selection)]);
+ const canvas=document.createElement('canvas');canvas.width=source.naturalWidth;canvas.height=source.naturalHeight;
+ const ctx=canvas.getContext('2d',{willReadFrequently:true})!;ctx.drawImage(mask,0,0,canvas.width,canvas.height);
+ const selected=characterRemovalMask(ctx.getImageData(0,0,canvas.width,canvas.height).data,canvas.width,canvas.height,Math.max(2,Math.round(Math.max(canvas.width,canvas.height)/256)));
+ ctx.drawImage(source,0,0);const pixels=ctx.getImageData(0,0,canvas.width,canvas.height);
+ ctx.clearRect(0,0,canvas.width,canvas.height);ctx.drawImage(base,0,0,canvas.width,canvas.height);const output=ctx.getImageData(0,0,canvas.width,canvas.height);
+ for(let i=0;i<selected.length;i++)if(selected[i])for(let c=0;c<4;c++)output.data[i*4+c]=pixels.data[i*4+c];
+ ctx.putImageData(output,0,0);return canvas.toDataURL('image/png');
 }

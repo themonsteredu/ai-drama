@@ -8,9 +8,9 @@ import {activeNarration} from '@/lib/film-narration';
 import {downloadBlob,fileName} from '@/lib/project-files';
 import './drawing-movie.css';
 
-type Props={project:DrawingProject;onTransition:(sceneId:string,kind:DrawingTransition)=>void;onPlayStory:()=>void;onClose:()=>void};
+type Props={project:DrawingProject;onTransition:(sceneId:string,kind:DrawingTransition)=>void;onDeleteScene:(sceneId:string)=>void;onPlayStory:()=>void;onClose:()=>void};
 
-export function DrawingMovieDialog({project,onTransition,onPlayStory,onClose}:Props){
+export function DrawingMovieDialog({project,onTransition,onDeleteScene,onPlayStory,onClose}:Props){
  const dialog=useRef<HTMLDialogElement>(null),canceled=useRef(false),alive=useRef(true);
  // Browser support is read on the client only; the server has no MediaRecorder to ask.
  const [usable,setUsable]=useState<boolean|null>(null);
@@ -49,7 +49,7 @@ export function DrawingMovieDialog({project,onTransition,onPlayStory,onClose}:Pr
     {movieTimeline(project).map(({scene,seconds},index)=>{
      const background=project.assets.find(a=>a.id===scene.backgroundAssetId),selected=scene.transition??'cut';
      return <li key={scene.id}>
-      <div className="movie-scene-card"><b>{index+1}</b>{background?<img src={background.source} alt={`${scene.title} 그림`}/>:<span className="movie-scene-empty" aria-hidden="true"/>}<div><strong>{scene.title}</strong><small>{narration?'전체 녹음':scene.voice?'녹음 있음':'녹음 없음'} · {Number(seconds.toFixed(2))}초</small></div></div>
+      <div className="movie-scene-card"><b>{index+1}</b>{background?<img src={background.source} alt={`${scene.title} 그림`}/>:<span className="movie-scene-empty" aria-hidden="true"/>}<div><strong>{scene.title}</strong><small>{narration?'전체 녹음':scene.voice?'녹음 있음':'녹음 없음'} · {Number(seconds.toFixed(2))}초</small></div><button type="button" className="movie-delete-scene" aria-label={`${index+1}장면 지우기`} disabled={busy} onClick={()=>onDeleteScene(scene.id)}>지우기</button></div>
       {index<project.scenes.length-1?<fieldset className="movie-transition" disabled={busy} aria-label={`${index+1}장면에서 ${index+2}장면으로 바꾸기`}>
        <legend>다음 장면은</legend>
        <div className="movie-transition-choices">{transitionChoices.map(choice=><label key={choice.id} className={selected===choice.id?'is-selected':''}>
@@ -72,7 +72,7 @@ export function DrawingMovieDialog({project,onTransition,onPlayStory,onClose}:Pr
       <ol>
        <li><b>아이패드</b> — 오른쪽 위에서 아래로 쓸어내려 제어센터를 열고 ⏺(화면 기록)을 눌러요. 안 보이면 설정 &gt; 제어 센터에서 「화면 기록」을 더해요.</li>
        <li><b>갤럭시</b> — 위에서 아래로 쓸어내려 「화면 녹화」를 누르고, 소리를 「미디어 소리」로 골라요.</li>
-       <li>녹화가 시작되면 위의 <b>▶ 처음부터 쭉 보기</b>를 눌러요.</li>
+       <li>녹화가 시작되면 위의 <b>처음부터 보기</b>를 눌러요.</li>
        <li>이야기가 끝나면 녹화를 멈춰요. 영상이 사진첩에 저장돼요.</li>
       </ol>
      </section>

@@ -23,7 +23,7 @@ try{
  assert(!validateDrawingProject({...p,scenes:p.scenes.map(s=>({...s,durationSeconds:-2}))}));
  console.log('PASS: four scenes, imported 32-second dialogue, manual timing, no dialogue truncation and backup round trip.');
  const durations=[2.25,3.5,1.75,4];let timed=emptyFourSceneProject();
- for(const [i,duration] of durations.entries())timed=applyVoice(timed,timed.scenes[i].id,{...voice,id:'take-'+i,duration});
+ for(const [i,duration] of durations.entries())timed=applyVoice(timed,timed.scenes[i].id,{...voice,id:'voice-take-'+i,duration});
  assert.deepEqual(movieTimeline(timed).map(s=>s.seconds),durations);
  assert.deepEqual(movieTimeline(timed).map(s=>s.at),[0,2.25,5.75,7.5]);assert.equal(movieSeconds(timed),11.5);
  timed={...timed,narration:{id:'full',source:voice.source,duration:32,enabled:true},scenes:timed.scenes.map((s,i)=>i===0?{...s,durationSeconds:15}:s)};
@@ -34,6 +34,19 @@ try{
  assert.equal(applyVoice(timed,'missing',voice),timed);assert.equal(sceneSeconds(emptyFourSceneProject().scenes[0]),4);
  assert.equal(sceneSeconds({...replacement.scenes[0],durationSeconds:.5}),1.25);
  console.log('PASS: fractional per-scene audio ends at exact cuts, short recordings, replacement resets automatic length, full narration retained but disabled, immutable undo data.');
+ const {deleteDrawingScene}=local('./apps/play-studio/lib/drawing-removal.js');
+ const {addNarration}=local('./apps/play-studio/lib/film-narration.js');
+ const middle=addNarration({...timed,activeSceneId:timed.scenes[1].id,narration:undefined},voice),middleBefore=JSON.stringify(middle);
+ const removedScene=deleteDrawingScene(middle,middle.activeSceneId);
+ assert.equal(removedScene.scenes.length,3);assert.equal(removedScene.activeSceneId,timed.scenes[0].id);
+ assert.deepEqual(removedScene.scenes,[timed.scenes[0],timed.scenes[2],timed.scenes[3]]);
+ assert.deepEqual(removedScene.assets,middle.assets);assert.equal(removedScene.narration.enabled,false);assert.equal(removedScene.narration.original.source,middle.narration.original.source);
+ assert.equal(JSON.stringify(middle),middleBefore,'deletion retains the entire undo snapshot');assert(validateDrawingProject(removedScene));
+ assert.equal(deleteDrawingScene(middle,timed.scenes[3].id).activeSceneId,middle.activeSceneId);
+ assert.equal(deleteDrawingScene(middle,'missing'),middle);
+ const single={...middle,scenes:[middle.scenes[1]]},cleared=deleteDrawingScene(single,single.activeSceneId);
+ assert.equal(cleared.scenes.length,1);assert.equal(cleared.scenes[0].id,single.activeSceneId);assert.equal(cleared.scenes[0].voice,undefined);assert.equal(cleared.scenes[0].items.length,0);assert(validateDrawingProject(cleared));
+ console.log('PASS: active/nonactive/last scene deletion, adjacent selection, retained original audio/assets, safe empty slot and immutable undo.');
 
  const raster='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jE9sAAAAASUVORK5CYII=';
  const character={id:'kept-character',name:'아이 그림',kind:'person',width:1,height:1,source:raster};

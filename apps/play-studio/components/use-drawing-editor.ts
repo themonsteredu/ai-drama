@@ -9,7 +9,7 @@ import {loadDrawing,saveDrawing} from '@/lib/drawing-storage';
 import {loadDrawingImages} from '@/lib/drawing-media';
 import {drawDrawingScene,hitDrawing} from '@/lib/drawing-renderer';
 import {downloadBlob,fileName} from '@/lib/project-files';
-import {removeDrawingAsset,removeSceneBackground} from '@/lib/drawing-removal';
+import {removeDrawingAsset,removeSceneBackground,deleteDrawingScene} from '@/lib/drawing-removal';
 import {rotateSceneBackground} from '@/lib/drawing-rotation';
 
 function safeItemPoint(item:DrawingItem,asset:DrawingAsset,pos:{x:number;y:number}){
@@ -71,7 +71,7 @@ export function useDrawingEditor(storageKey='active',initialProject=emptyDrawing
   function layer(delta:-1|1){if(!selected)return;const items=[...scene.items],index=items.findIndex(i=>i.id===selected.id),to=bounded(index+delta,0,items.length-1);const [item]=items.splice(index,1);items.splice(to,0,item);editScene({items});}
   function addScene(copy=false){if(project.scenes.length>=6)return;const id=drawingId('scene');const next=copy?{...structuredClone(scene),id,title:`장면 ${project.scenes.length+1}`,items:scene.items.map(i=>({...i,id:drawingId('drawing')}))}:newDrawingScene(id,`장면 ${project.scenes.length+1}`);commit(p=>({...p,activeSceneId:id,scenes:[...p.scenes,next]}));setSelectedId(undefined);setDestination(false);}
   function switchScene(id:string){const wasStory=storyOn.current;if(wasStory)stop();const p=projectRef.current,s=p.scenes.find(s=>s.id===id);if(!s||id===p.activeSceneId)return;clock.current=0;setReset(n=>n+1);if(playing&&!wasStory)musicPlayer.current?.play(p,s,setError);else musicPlayer.current?.stop();setDestination(false);setSelectedId(undefined);setValue({...p,activeSceneId:id});}
-  function deleteScene(){if(project.scenes.length===1||!confirm('이 장면을 지울까요? 실행 취소로 되돌릴 수 있어요.'))return;const scenes=project.scenes.filter(s=>s.id!==scene.id);commit(p=>({...p,scenes,activeSceneId:scenes[0].id}));setSelectedId(undefined);setDestination(false);}
+  function deleteScene(sceneId=scene.id){const target=projectRef.current.scenes.find(s=>s.id===sceneId);if(!target||!confirm(`“${target.title}”을 지울까요? 그림과 녹음이 이 장면에서 빠져요.${projectRef.current.narration?.enabled?" 전체 녹음은 잠시 꺼지고 장면별 녹음을 사용해요.":""} 실행 취소로 되돌릴 수 있어요.`))return;commit(p=>deleteDrawingScene(p,sceneId));setSelectedId(undefined);setDestination(false);}
   function newWork(){if(!confirm('새 작품을 시작할까요? 지금 작품은 먼저 작품 파일로 보관해 주세요.'))return;setBlocked(false);setError('');commit(()=>({...initialProject(),id:drawingId('project')}));setSelectedId(undefined);setDestination(false);}
   function point(e:ReactPointerEvent<HTMLCanvasElement>){const r=e.currentTarget.getBoundingClientRect();return {x:bounded((e.clientX-r.left)/r.width*100,0,100),y:bounded((e.clientY-r.top)/r.height*100,0,100)};}
   function down(e:ReactPointerEvent<HTMLCanvasElement>){

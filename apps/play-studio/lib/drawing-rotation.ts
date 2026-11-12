@@ -32,7 +32,7 @@ export function applyRotatedBackground(project:DrawingProject,sceneId:string,rot
  const scene=project.scenes.find(s=>s.id===sceneId);if(!scene)throw new Error('장면을 찾지 못했어요.');
  const assets=[...project.assets],ids=new Map<string,string>();
  for(const [id,asset] of rotated){
-  const shared=project.scenes.some(s=>s.items.some(i=>i.assetId===id)||(s.id!==sceneId&&(s.backgroundAssetId===id||s.stillOriginalAssetId===id)));
+  const shared=project.scenes.some(s=>s.items.some(i=>i.assetId===id||i.separation?.sourceAssetId===id)||(s.id!==sceneId&&(s.backgroundAssetId===id||s.stillOriginalAssetId===id)));
   const nextId=shared?drawingId('rotated'):id;ids.set(id,nextId);
   if(shared)assets.push({...asset,id:nextId});else assets[assets.findIndex(a=>a.id===id)]={...asset,id};
  }

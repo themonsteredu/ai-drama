@@ -24,7 +24,7 @@ export function characterRemovalMask(marks:Uint8ClampedArray,width:number,height
 /**
  * Remove the actor BEFORE asking the image model to continue the background.
  * Only unselected boundary colors seed the fill; no selected RGB is reused.
- * This is an intermediate fill, not the final AI background.
+ * This local fill can be applied immediately or refined by AI afterward.
  */
 export function seedCharacterBackground(original:Uint8ClampedArray,selected:Uint8Array,width:number,height:number){
  const output=new Uint8ClampedArray(original),count=width*height;
@@ -63,11 +63,23 @@ export function seedCharacterBackground(original:Uint8ClampedArray,selected:Uint
  return output;
 }
 
-export function characterRemovalChanged(original:Uint8ClampedArray,result:Uint8ClampedArray,marks:Uint8ClampedArray){
- let selected=0,changed=0;
+export function characterRemovalChanged(original:Uint8ClampedArray,result:Uint8ClampedArray,marks:Uint8ClampedArray,width=original.length/4){
+ let selected=0,changed=0,ink=0,removedInk=0;
+ const height=original.length/4/width;
+ const neighbors=[[-1,0],[1,0],[0,-1],[0,1],[-3,0],[3,0],[0,-3],[0,3]];
  for(let i=0;i<original.length;i+=4)if(marks[i]<128){
   selected++;
-  if(Math.max(Math.abs(original[i]-result[i]),Math.abs(original[i+1]-result[i+1]),Math.abs(original[i+2]-result[i+2]))>24)changed++;
+  const different=Math.max(Math.abs(original[i]-result[i]),Math.abs(original[i+1]-result[i+1]),Math.abs(original[i+2]-result[i+2]))>24;
+  if(different)changed++;
+  const x=(i/4)%width,y=Math.floor(i/4/width),shade=original[i]+original[i+1]+original[i+2];
+  let line=false;
+  for(const [dx,dy] of neighbors){
+   const nx=x+dx,ny=y+dy;if(nx<0||nx>=width||ny<0||ny>=height)continue;
+   const j=(ny*width+nx)*4;
+   if(original[j]+original[j+1]+original[j+2]-shade>90){line=true;break;}
+  }
+  if(line){ink++;if(different)removedInk++;}
  }
- return selected>0&&changed/selected>=.01;
+ // A small recoloring used to count as removal while almost all character lines remained.
+ return selected>0&&(ink>=4?removedInk/ink>=.8:changed/selected>=.5);
 }

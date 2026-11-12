@@ -43,6 +43,10 @@ export function validateDrawingProject(v:unknown):v is DrawingProject{
   }
   if(bytes>48_000_000||!Array.isArray(v.scenes)||!v.scenes.length||v.scenes.length>6||!ids(v.scenes))return false;
   const assets=new Set(v.assets.map(a=>a.id));
+  for(const scene of v.scenes)if(record(scene)&&Array.isArray(scene.items))for(const item of scene.items)if(record(item)&&item.separation!==undefined){
+    const cut=item.separation;if(!record(cut)||!assets.has(cut.sourceAssetId)||!validRasterSource(cut.mask)||!cut.mask.startsWith('data:image/png;'))return false;
+    bytes+=cut.mask.length;if(bytes>48_000_000)return false;
+  }
   if(!v.scenes.some(s=>record(s)&&s.id===v.activeSceneId))return false;
   return v.scenes.every(s=>{
     if(!record(s)||!text(s.id,150)||!text(s.title,40)||typeof s.background!=='string'||!/^#[0-9a-f]{6}$/i.test(s.background)||!text(s.caption,120))return false;

@@ -18,6 +18,13 @@ try{
  const differentActor=original.slice();for(let i=0;i<mask.length;i++)if(mask[i])differentActor.set([5,40,10,255],i*4);
  assert.deepEqual(seedCharacterBackground(differentActor,mask,width,height),filled,'seed depends only on surrounding pixels');
  assert(!characterRemovalChanged(original,original,marks),'unchanged generated image cannot be applied');assert(characterRemovalChanged(original,filled,marks));
+ const tinyChange=original.slice();tinyChange.set([0,0,0,255],(3*width+4)*4);
+ assert(!characterRemovalChanged(original,tinyChange,marks,width),'changing one selected pixel must not count as removing a character');
+ const lineOriginal=original.slice(),lineRecolor=original.slice();
+ for(let y=2;y<=4;y++)for(let x=3;x<=5;x++)if(x===3||x===5||y===2||y===4){lineOriginal.set([0,0,0,255],(y*width+x)*4);lineRecolor.set([0,0,0,255],(y*width+x)*4);}
+ lineRecolor.set([120,180,230,255],(3*width+4)*4);
+ assert(!characterRemovalChanged(lineOriginal,lineRecolor,marks,width),'recoloring the body while retaining its outline is rejected');
+ assert(characterRemovalChanged(lineOriginal,filled,marks,width),'removing the whole outline and body passes');
  assert.throws(()=>seedCharacterBackground(original,new Uint8Array(width*height).fill(1),width,height));
  const edgeMarks=new Uint8ClampedArray(3*3*4).fill(255);edgeMarks.set([0,0,0,255],0);
  assert.equal(characterRemovalMask(edgeMarks,3,3,1).reduce((a,b)=>a+b,0),4,'edge margin is clipped, not wrapped');

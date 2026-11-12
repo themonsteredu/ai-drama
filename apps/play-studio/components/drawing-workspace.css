@@ -198,3 +198,5 @@
  .draw-workspace>.draw-voice{grid-column:1/-1}
  .story-studio[data-mobile-tab=pictures] .draw-workspace>.draw-voice,.story-studio[data-mobile-tab=actions] .draw-workspace>.draw-voice{display:none}
 }
+
+.draw-stage-heading-actions{display:flex;align-items:center;gap:6px;flex-shrink:0}.drawing-app .draw-stage-heading-actions button{min-height:36px;padding:5px 9px;white-space:nowrap;font-size:12px}.drawing-app .draw-stage-heading-actions .draw-delete-scene{color:#a43939;border-color:#ead4d4;background:#fff}

@@ -10,7 +10,7 @@
 .movie-content button:disabled{opacity:.5;cursor:default}
 .movie-scenes{list-style:none;margin:0;padding:0;display:grid;gap:0;max-height:min(48dvh,420px);overflow:auto;overscroll-behavior:contain;padding-right:4px}
 .movie-scenes li{min-width:0}
-.movie-scene-card{display:grid;grid-template-columns:24px 64px minmax(0,1fr);align-items:center;gap:10px;padding:10px 12px;border-radius:12px;background:#eff5fd}
+.movie-scene-card{display:grid;grid-template-columns:24px 64px minmax(0,1fr) auto;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;background:#eff5fd}
 .movie-scene-card>b{font-size:15px;color:#55708f}
 .movie-scene-card img,.movie-scene-empty{width:64px;height:44px;object-fit:contain;border-radius:6px;background:white}
 .movie-scene-empty{border:1px solid #d9e4f0}
@@ -41,5 +41,7 @@
 .movie-error{margin:0;padding:10px 12px;border-radius:12px;background:#fdecef;color:#a43043;font-size:13px;word-break:keep-all}
 .movie-content :focus-visible{outline:3px solid #2f68c4;outline-offset:3px}
 .draw-playbar .movie-open{background:#e8f2ff;color:#1b4a86;white-space:nowrap}
-@media(max-width:400px){.movie-content{padding:15px;gap:10px}.drawing-app .movie-dialog .movie-transition{margin-left:8px;padding-right:0}.movie-transition-choices{gap:4px}.drawing-app .movie-dialog .movie-transition-choices label{font-size:13px;gap:3px}.movie-scene-card{grid-template-columns:20px 52px minmax(0,1fr);gap:8px}.movie-scene-card img,.movie-scene-empty{width:52px;height:36px}}
+@media(max-width:400px){.movie-content{padding:15px;gap:10px}.drawing-app .movie-dialog .movie-transition{margin-left:8px;padding-right:0}.movie-transition-choices{gap:4px}.drawing-app .movie-dialog .movie-transition-choices label{font-size:13px;gap:3px}.movie-scene-card{grid-template-columns:20px 52px minmax(0,1fr) auto;gap:8px}.movie-scene-card img,.movie-scene-empty{width:52px;height:36px}}
 @media(prefers-reduced-motion:reduce){.movie-bar i{transition:none}}
+
+.movie-content .movie-delete-scene{min-height:44px;padding:7px 9px;font-size:13px;color:#a43939;background:#fff;border-color:#ead4d4;white-space:nowrap}
