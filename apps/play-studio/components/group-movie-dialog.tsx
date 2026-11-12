@@ -27,13 +27,13 @@ export function GroupMovieDialog({onClose}:{onClose:()=>void}){
  async function save(){
   if(lock.current)return;lock.current=true;setBusy(true);setPreview(undefined);setError('');setStatus('');setRatio(0);controller.current=new AbortController();
   try{const movie=await joinGroupMovies(clips,(value,message)=>{if(alive.current){setRatio(value);setStatus(message);}},controller.current.signal);if(alive.current){downloadBlob(movie.blob,`${fileName(title)}.${movie.extension}`);setStatus('하나로 합친 영상을 저장했어요. 다운로드에서 확인해 주세요.');}}
-  catch(cause){if(alive.current)setError(cause instanceof Error?cause.message:'영상을 합치지 못했어요.');}
+  catch(cause){if(alive.current){setStatus('');setError(cause instanceof Error?cause.message:'영상을 합치지 못했어요.');}}
   finally{lock.current=false;if(alive.current)setBusy(false);}
  }
  const selected=clips.find(c=>c.id===preview);
  return <dialog ref={dialog} className="group-movie-dialog" aria-labelledby="group-movie-title" onCancel={e=>{if(disabled)e.preventDefault();else onClose();}}>
   <header><div><h2 id="group-movie-title">모둠 영상 합치기</h2><p>각 패드에서 저장한 영상을 이 기기에 모아 주세요.</p></div><button disabled={disabled} onClick={onClose} aria-label="모둠 영상 창 닫기">닫기</button></header>
-  <ol className="group-movie-steps"><li>영상 넣기</li><li>순서 정하기</li><li>하나로 저장</li></ol>
+  <ol className="group-movie-steps"><li><b>1</b>영상 넣기</li><li><b>2</b>순서 정하기</li><li><b>3</b>하나로 저장</li></ol>
   <label className="group-movie-title">영상 제목<input aria-label="합친 영상 제목" maxLength={80} value={title} disabled={disabled} onChange={e=>setTitle(e.target.value)}/></label>
   <button className="group-movie-add" disabled={disabled} onClick={()=>input.current?.click()}>{loading?'영상을 읽고 있어요…':'+ 모둠 영상 넣기'}</button>
   <input ref={input} hidden type="file" multiple accept="video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov,.m4v" onChange={e=>{const files=Array.from(e.target.files??[]);e.target.value='';if(files.length)void add(files);}}/>

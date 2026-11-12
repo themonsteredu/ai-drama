@@ -53,9 +53,9 @@ export function BackgroundEditDialog({project,scene,onApply,onClose,mode='backgr
  function stroke(event:PointerEvent<HTMLCanvasElement>,start=false){
   if(!ready||busy||!event.isPrimary||(start&&event.button!==0)||(!start&&!last.current))return;event.preventDefault();const p=point(event),ctx=mask.current!.getContext('2d')!;
   if(start){remember();event.currentTarget.setPointerCapture(event.pointerId);last.current=p;}
-  ctx.strokeStyle=erase?'#fff':'#000';ctx.fillStyle=ctx.strokeStyle;ctx.lineWidth=toolSize;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(last.current!.x,last.current!.y);ctx.lineTo(p.x,p.y);ctx.stroke();ctx.beginPath();ctx.arc(p.x,p.y,toolSize/2,0,Math.PI*2);ctx.fill();last.current=p;setResult('');paint();
+  ctx.strokeStyle=erase?'#fff':'#000';ctx.fillStyle=ctx.strokeStyle;ctx.lineWidth=toolSize;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(last.current!.x,last.current!.y);ctx.lineTo(p.x,p.y);ctx.stroke();ctx.beginPath();ctx.arc(p.x,p.y,toolSize/2,0,Math.PI*2);ctx.fill();last.current=p;setResult('');setError('');paint();
  }
- function clear(){const m=mask.current;if(!m||!ready||busy)return;remember();const c=m.getContext('2d')!;c.fillStyle='#fff';c.fillRect(0,0,m.width,m.height);setResult('');paint();}
+ function clear(){const m=mask.current;if(!m||!ready||busy)return;remember();const c=m.getContext('2d')!;c.fillStyle='#fff';c.fillRect(0,0,m.width,m.height);setResult('');setError('');paint();}
 
  useEffect(()=>{
   let canceled=false;

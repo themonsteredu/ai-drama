@@ -15,6 +15,9 @@ try{
  const {validateDrawingProject,parseDrawingFile}=local('./apps/play-studio/lib/drawing-project.js');
  const {applyVoice}=local('./apps/play-studio/lib/drawing-voice.js');
  let p=emptyFourSceneProject();assert.equal(p.scenes.length,4);assert(validateDrawingProject(p));
+ const {moveGroupMovie,containVideo}=local('./apps/play-studio/lib/group-movie.js');
+ const order=['first','second','third'];assert.deepEqual(moveGroupMovie(order,2,-1),['first','third','second']);assert.deepEqual(order,['first','second','third']);assert.equal(moveGroupMovie(order,0,-1),order);assert.equal(moveGroupMovie(order,2,1),order);assert.deepEqual(containVideo(640,360),{x:0,y:0,width:1280,height:720});assert.deepEqual(containVideo(360,640),{x:437.5,y:0,width:405,height:720});
+ console.log('PASS: group video ordering remains immutable and portrait/landscape video fitting never crops content.');
  const voice={id:'voice-test',source:'data:audio/wav;base64,UklGRg==',duration:32};
  p=applyVoice(p,p.scenes[0].id,voice);assert.equal(sceneSeconds(p.scenes[0]),32);
  p.scenes[0].durationSeconds=40;assert.equal(sceneSeconds(p.scenes[0]),40);
