@@ -89,3 +89,6 @@ export async function savedApiKey(){
  return decryptKey(rows[0].encrypted_key);
 }
 export function failure(error:unknown){return error instanceof SettingsError?reply({error:error.message,...(error.retryAfter?{retryable:true,retryAfter:error.retryAfter}:{})},error.status,error.retryAfter?{'Retry-After':String(error.retryAfter)}:{}):reply({error:'연결을 완료하지 못했어요. 잠시 후 다시 시도해 주세요.'},503);}
+
+// Shared only with server routes; never import this module from a client component.
+export {db as playDb,mac as signPlayValue};

@@ -7,9 +7,9 @@ import {clockLabel,movieSeconds} from '@/lib/drawing-movie';
 import {loadDrawingImages} from '@/lib/drawing-media';
 import './group-movie.css';
 
-export function GroupProjectDialog({project,onApply,onClose,onVideos}:{project:DrawingProject;onApply:(p:DrawingProject)=>void;onClose:()=>void;onVideos:()=>void}){
+export function GroupProjectDialog({project,onApply,onClose,onVideos,initialWorks}:{initialWorks?:GroupWork[];project:DrawingProject;onApply:(p:DrawingProject)=>void;onClose:()=>void;onVideos:()=>void}){
  const hasWork=project.scenes.some(s=>s.backgroundAssetId||s.items.length||s.voice)||!!project.narration;
- const [works,setWorks]=useState<GroupWork[]>(()=>hasWork?[{id:'current-work',name:'현재 작품',project}]:[]),[title,setTitle]=useState('우리 반 이야기'),[busy,setBusy]=useState(false),[error,setError]=useState(''),[status,setStatus]=useState('');
+ const [works,setWorks]=useState<GroupWork[]>(()=>initialWorks??(hasWork?[{id:'current-work',name:'현재 작품',project}]:[])),[title,setTitle]=useState('우리 반 이야기'),[busy,setBusy]=useState(false),[error,setError]=useState(''),[status,setStatus]=useState('');
  const dialog=useRef<HTMLDialogElement>(null),input=useRef<HTMLInputElement>(null),alive=useRef(true),lock=useRef(false);
  const count=works.reduce((n,w)=>n+w.project.scenes.length,0),seconds=works.reduce((n,w)=>n+movieSeconds(w.project),0);
  useEffect(()=>{alive.current=true;const previous=document.activeElement as HTMLElement|null;dialog.current?.showModal();return()=>{alive.current=false;previous?.focus();};},[]);
@@ -40,7 +40,7 @@ export function GroupProjectDialog({project,onApply,onClose,onVideos}:{project:D
  }
  return <dialog ref={dialog} className="group-movie-dialog group-project-dialog" aria-labelledby="group-project-title" onCancel={e=>{if(busy)e.preventDefault();else onClose();}}>
   <header><div><h2 id="group-project-title">모둠 작품 모으기</h2><p>다른 패드에서 만든 장면·그림·녹음·움직임을 하나로 모아요.</p></div><button disabled={busy} onClick={onClose} aria-label="모둠 작품 창 닫기">닫기</button></header>
-  <ol className="group-movie-steps"><li><b>1</b>각 패드에서 작품 보관</li><li><b>2</b>파일을 이 기기로 보내기</li><li><b>3</b>여기에 넣기</li></ol>
+  {!initialWorks?<ol className="group-movie-steps"><li><b>1</b>각 패드에서 작품 보관</li><li><b>2</b>파일을 이 기기로 보내기</li><li><b>3</b>여기에 넣기</li></ol>:<p>수업에 저장된 모둠 작품이에요. 위로·아래로 눌러 순서를 정해 주세요.</p>}
   <label className="group-movie-title">합친 작품 제목<input aria-label="합친 작품 제목" maxLength={80} value={title} disabled={busy} onChange={e=>setTitle(e.target.value)}/></label>
   <button className="group-movie-add" disabled={busy} onClick={()=>input.current?.click()}>+ 모둠 작품 파일 넣기</button>
   <input ref={input} hidden type="file" multiple accept=".json,application/json" onChange={e=>{const files=Array.from(e.target.files??[]);e.target.value='';if(files.length)void add(files);}}/>
