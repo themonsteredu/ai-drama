@@ -45,3 +45,5 @@
 @media(prefers-reduced-motion:reduce){.movie-bar i{transition:none}}
 
 .movie-content .movie-delete-scene{min-height:44px;padding:7px 9px;font-size:13px;color:#a43939;background:#fff;border-color:#ead4d4;white-space:nowrap}
+
+.movie-scene-order{display:flex;justify-content:flex-end;gap:6px;margin:6px 0}.drawing-app .movie-scene-order button{min-height:40px;font-size:13px;padding:6px 14px}

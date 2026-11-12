@@ -1,13 +1,13 @@
 import type {DrawingProject,DrawingScene} from '../../../packages/stage-core/src/drawing';
 import {drawDrawingScene,DRAW_WIDTH,DRAW_HEIGHT,type RasterCache} from './drawing-renderer';
-import {effectiveMusic,synthMusic} from './drawing-music';
+import {effectiveMusic,musicPlaybackKey,synthMusic} from './drawing-music';
 import {activeNarration,narrationDurations} from './film-narration';
 import {createTransitionPainter,incomingTransition} from './drawing-transition';
 
 /** Automatic scenes start with their recording and cut when that recording ends. */
 export const SCENE_PAD=0,SCENE_MIN=2.5,SCENE_SILENT=4,VOICE_LEAD=0;
 export function sceneSeconds(scene:DrawingScene){
- const minimum=scene.voice?scene.voice.duration:SCENE_MIN;
+ const minimum=scene.voice?scene.voice.duration:scene.durationSeconds!==undefined?1:SCENE_MIN;
  return Math.max(minimum,scene.durationSeconds??scene.voice?.duration??SCENE_SILENT);
 }
 export function movieTimeline(project:DrawingProject){
@@ -175,12 +175,13 @@ export async function recordMovie(project:DrawingProject,images:RasterCache,onPr
   videoTrack?.requestFrame?.();
   const base=context.currentTime;
   // Adjacent scenes with the same soundtrack share one source, so music never restarts at each cut.
-  const musicRuns:{music:NonNullable<ReturnType<typeof musicSource>>;at:number;seconds:number}[]=[];
+  const musicRuns:{key:string;music:NonNullable<ReturnType<typeof musicSource>>;at:number;seconds:number}[]=[];
   for(const step of plan){
    if(!step.music)continue;
    const last=musicRuns[musicRuns.length-1];
-   if(last&&Math.abs(last.at+last.seconds-step.at)<.001&&JSON.stringify(last.music)===JSON.stringify(step.music))last.seconds+=step.seconds;
-   else musicRuns.push({music:step.music,at:step.at,seconds:step.seconds});
+   const key=musicPlaybackKey(step.scene);
+   if(last&&last.key===key&&Math.abs(last.at+last.seconds-step.at)<.001&&JSON.stringify(last.music)===JSON.stringify(step.music))last.seconds+=step.seconds;
+   else musicRuns.push({key,music:step.music,at:step.at,seconds:step.seconds});
   }
   for(const run of musicRuns){
    const buffer=cache.get(run.music.url);

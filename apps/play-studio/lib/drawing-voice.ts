@@ -2,7 +2,7 @@ import type {DrawingProject,DrawingScene,DrawingVoice} from '../../../packages/s
 
 /** A second-grader's line is one or two sentences; twenty seconds is already generous. */
 export const VOICE_MAX_SECONDS=20;
-export const VOICE_FILE_LIMIT=1_400_000,VOICE_TOTAL_LIMIT=32_000_000;
+export const VOICE_FILE_LIMIT=1_400_000,VOICE_TOTAL_LIMIT=96_000_000;
 /** 64 kbps mono keeps a full-length take near 200 KB once base64-encoded. */
 const VOICE_BITRATE=64_000;
 
@@ -16,7 +16,7 @@ export function voiceSupported(){
  return typeof navigator!=='undefined'&&!!navigator.mediaDevices?.getUserMedia&&typeof MediaRecorder!=='undefined';
 }
 export function validVoiceSource(v:unknown):v is string{
- return typeof v==='string'&&v.length<=11_000_000&&/^data:audio\/(webm|mp4|aac|mpeg|ogg|wav|x-wav|x-m4a|m4a)(;codecs=[\w.,=-]+)?;base64,[A-Za-z0-9+/]+={0,2}$/.test(v);
+ return typeof v==='string'&&v.length<=27_000_000&&/^data:audio\/(webm|mp4|aac|mpeg|ogg|wav|x-wav|x-m4a|m4a)(;codecs=[\w.,=-]+)?;base64,[A-Za-z0-9+/]+={0,2}$/.test(v);
 }
 export function voiceBytes(p:{scenes?:unknown}){
  return Array.isArray(p.scenes)?p.scenes.reduce((sum:number,s:unknown)=>{const v=(s as {voice?:{source?:unknown}})?.voice;return sum+(typeof v?.source==='string'?v.source.length:0);},0):0;
@@ -32,7 +32,7 @@ export function validateVoices(p:Record<string,unknown>):boolean{
   const v=voice as Record<string,unknown>;
   if(typeof v.id!=='string'||!v.id.startsWith('voice-')||v.id.length>150)return false;
   if(!validVoiceSource(v.source))return false;
-  if(typeof v.duration!=='number'||!Number.isFinite(v.duration)||v.duration<=0||v.duration>VOICE_UPLOAD_SECONDS+.5)return false;
+  if(typeof v.duration!=='number'||!Number.isFinite(v.duration)||v.duration<=0||v.duration>600.5)return false;
  }
  return voiceBytes(p as {scenes?:unknown})<=VOICE_TOTAL_LIMIT;
 }
@@ -45,7 +45,7 @@ export function applyVoice(p:DrawingProject,sceneId:string,voice:DrawingVoice|nu
   if(voice){copy.voice=voice;delete copy.durationSeconds;}else delete copy.voice;
   return copy;
  })};
- if(voiceBytes(next)>VOICE_TOTAL_LIMIT)throw new Error('담은 목소리가 모두 합쳐 32MB를 넘어요. 다른 장면의 목소리를 지우고 다시 담아 주세요.');
+ if(voiceBytes(next)>VOICE_TOTAL_LIMIT)throw new Error('담은 목소리가 모두 합쳐 96MB를 넘어요. 다른 장면의 목소리를 지우고 다시 담아 주세요.');
  return next;
 }
 

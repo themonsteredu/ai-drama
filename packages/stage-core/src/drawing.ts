@@ -15,6 +15,8 @@ export interface DrawingItem {
   target?: { x: number; y: number }; speech: string;
 }
 export interface DrawingScene {
+  /** Scenes imported from the same group's common soundtrack share playback. */
+  musicGroup?: string;
   /** How this scene hands over to the next; absent in older projects means a cut. */
   transition?: DrawingTransition;
   durationSeconds?: number;

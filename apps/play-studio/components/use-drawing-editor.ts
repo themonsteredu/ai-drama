@@ -1,6 +1,6 @@
 'use client';
 import {useEffect,useRef,useState,type PointerEvent as ReactPointerEvent} from 'react';
-import {bounded,drawingId,emptyDrawingProject,newDrawingScene,parseDrawingFile,DRAWING_FILE_LIMIT,type DrawingProject,type DrawingAsset,type DrawingItem,type DrawingScene} from '@/lib/drawing-project';
+import {bounded,drawingId,emptyDrawingProject,newDrawingScene,parseDrawingFile,DRAWING_FILE_LIMIT,DRAWING_MAX_SCENES,DRAWING_MAX_ASSETS,DRAWING_ASSET_BYTES,type DrawingProject,type DrawingAsset,type DrawingItem,type DrawingScene} from '@/lib/drawing-project';
 import {DrawingMusicPlayer} from '@/lib/drawing-music';
 import {applyVoice,startVoiceRecording,VoicePlayer,VOICE_MAX_SECONDS,type VoiceSession} from '@/lib/drawing-voice';
 import {sceneSeconds,movieTimeline} from '@/lib/drawing-movie';
@@ -46,7 +46,7 @@ export function useDrawingEditor(storageKey='active',initialProject=emptyDrawing
   function undo(){const p=past.current.pop();if(!p)return;future.current.unshift(projectRef.current);stop();setValue(p);setSelectedId(undefined);setDestination(false);}
   function redo(){const p=future.current.shift();if(!p)return;past.current.push(projectRef.current);stop();setValue(p);setSelectedId(undefined);setDestination(false);}
   function place(asset:DrawingAsset,isNew=false){
-    if(isNew&&(project.assets.length>=32||project.assets.reduce((sum,a)=>sum+a.source.length,0)+asset.source.length>48_000_000)){setError('한 작품에 그림은 32개, 전체 용량은 약 48MB까지 보관할 수 있어요.');return false;}
+    if(isNew&&(project.assets.length>=DRAWING_MAX_ASSETS||project.assets.reduce((sum,a)=>sum+a.source.length,0)+asset.source.length>DRAWING_ASSET_BYTES)){setError('한 작품에 그림은 128개, 전체 용량은 약 96MB까지 보관할 수 있어요.');return false;}
     if(asset.kind!=='background'&&scene.items.length>=40){setError('한 장면에는 40개까지 놓을 수 있어요. 장면을 하나 더 만들어 주세요.');return false;}
     const id=drawingId('drawing');const width=bounded(38*asset.width/asset.height,10,26);
     const item:DrawingItem={id,assetId:asset.id,x:50,y:78,width,rotation:0,flipped:false,motion:asset.kind==='plant'?'sway':'still',speed:'normal',speech:''};
@@ -69,7 +69,7 @@ export function useDrawingEditor(storageKey='active',initialProject=emptyDrawing
   }
   function duplicate(){if(!selected||scene.items.length>=40)return;const id=drawingId('drawing');editScene({items:[...scene.items,{...selected,id,x:bounded(selected.x+5,5,95),target:selected.target?{...selected.target}:undefined}]});setSelectedId(id);}
   function layer(delta:-1|1){if(!selected)return;const items=[...scene.items],index=items.findIndex(i=>i.id===selected.id),to=bounded(index+delta,0,items.length-1);const [item]=items.splice(index,1);items.splice(to,0,item);editScene({items});}
-  function addScene(copy=false){if(project.scenes.length>=6)return;const id=drawingId('scene');const next=copy?{...structuredClone(scene),id,title:`장면 ${project.scenes.length+1}`,items:scene.items.map(i=>({...i,id:drawingId('drawing')}))}:newDrawingScene(id,`장면 ${project.scenes.length+1}`);commit(p=>({...p,activeSceneId:id,scenes:[...p.scenes,next]}));setSelectedId(undefined);setDestination(false);}
+  function addScene(copy=false){if(project.scenes.length>=DRAWING_MAX_SCENES)return;const id=drawingId('scene');const next=copy?{...structuredClone(scene),id,title:`장면 ${project.scenes.length+1}`,items:scene.items.map(i=>({...i,id:drawingId('drawing')}))}:newDrawingScene(id,`장면 ${project.scenes.length+1}`);commit(p=>({...p,activeSceneId:id,scenes:[...p.scenes,next]}));setSelectedId(undefined);setDestination(false);}
   function switchScene(id:string){const wasStory=storyOn.current;if(wasStory)stop();const p=projectRef.current,s=p.scenes.find(s=>s.id===id);if(!s||id===p.activeSceneId)return;clock.current=0;setReset(n=>n+1);if(playing&&!wasStory)musicPlayer.current?.play(p,s,setError);else musicPlayer.current?.stop();setDestination(false);setSelectedId(undefined);setValue({...p,activeSceneId:id});}
   function deleteScene(sceneId=scene.id){const target=projectRef.current.scenes.find(s=>s.id===sceneId);if(!target||!confirm(`“${target.title}”을 지울까요? 그림과 녹음이 이 장면에서 빠져요.${projectRef.current.narration?.enabled?" 전체 녹음은 잠시 꺼지고 장면별 녹음을 사용해요.":""} 실행 취소로 되돌릴 수 있어요.`))return;commit(p=>deleteDrawingScene(p,sceneId));setSelectedId(undefined);setDestination(false);}
   function newWork(){if(!confirm('새 작품을 시작할까요? 지금 작품은 먼저 작품 파일로 보관해 주세요.'))return;setBlocked(false);setError('');commit(()=>({...initialProject(),id:drawingId('project')}));setSelectedId(undefined);setDestination(false);}
@@ -95,7 +95,7 @@ export function useDrawingEditor(storageKey='active',initialProject=emptyDrawing
   function move(e:ReactPointerEvent<HTMLCanvasElement>){const d=drag.current;if(!d||d.pointerId!==e.pointerId)return;const pos=point(e);d.moved=true;const p=projectRef.current;setValue({...p,scenes:p.scenes.map(s=>s.id===p.activeSceneId?{...s,items:s.items.map(i=>{if(i.id!==d.id)return i;const asset=p.assets.find(a=>a.id===i.assetId);const raw={x:pos.x-d.dx,y:pos.y-d.dy};const next=asset?safeItemPoint(i,asset,raw):{x:bounded(raw.x,2,98),y:bounded(raw.y,5,98)};return {...i,...next};})}:s)});}
   function up(e:ReactPointerEvent<HTMLCanvasElement>){const d=drag.current;if(!d||d.pointerId!==e.pointerId)return;drag.current=null;if(d.moved){past.current=[...past.current.slice(-29),d.start];future.current=[];setValue({...projectRef.current,updatedAt:new Date().toISOString()});}}
   function cancel(){if(drag.current){setValue(drag.current.start);drag.current=null;}}
-  async function importWork(file:File){setBusy(true);try{if(file.size>DRAWING_FILE_LIMIT)throw new Error('작품 파일은 128MB 이하로 골라 주세요.');const next=parseDrawingFile(await file.text());await loadDrawingImages(next.assets);if(!confirm('불러온 작품으로 바꿀까요? 현재 작품은 먼저 파일로 보관해 주세요.'))return;setBlocked(false);commit(()=>next);setError('');setSelectedId(undefined);setDestination(false);}catch(cause){setError(cause instanceof Error?cause.message:'작품을 읽지 못했어요.');}finally{setBusy(false);}}
+  async function importWork(file:File){setBusy(true);try{if(file.size>DRAWING_FILE_LIMIT)throw new Error('작품 파일은 320MB 이하로 골라 주세요.');const next=parseDrawingFile(await file.text());await loadDrawingImages(next.assets);if(!confirm('불러온 작품으로 바꿀까요? 현재 작품은 먼저 파일로 보관해 주세요.'))return;setBlocked(false);commit(()=>next);setError('');setSelectedId(undefined);setDestination(false);}catch(cause){setError(cause instanceof Error?cause.message:'작품을 읽지 못했어요.');}finally{setBusy(false);}}
   function backup(){const blob=new Blob([JSON.stringify(project)],{type:'application/json'});if(blob.size>DRAWING_FILE_LIMIT){setError('작품 파일이 128MB를 넘어요. 사용하지 않는 그림이나 음악을 줄여 주세요.');return;}downloadBlob(blob,`${fileName(project.title)}.moakit-drawing.json`);}
   async function startVoice(){
     if(!loaded||recording||session.current)return;

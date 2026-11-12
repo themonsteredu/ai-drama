@@ -1,6 +1,6 @@
 import type {DrawingProject,DrawingScene,DrawingMusic,DrawingMusicAsset} from '../../../packages/stage-core/src/drawing';
 
-export const MUSIC_FILE_LIMIT=3_000_000, MUSIC_TOTAL_LIMIT=8_000_000; // 6MB binary after base64
+export const MUSIC_FILE_LIMIT=3_000_000, MUSIC_TOTAL_LIMIT=24_000_000; // approximately 18MB binary after base64
 // Original procedural compositions; no samples or external melodies. See docs/play-music.md.
 export const musicPresets=[
  {id:'music-happy',label:'신나는',icon:'☀️',bpm:120,notes:[72,76,79,74,77,81,79,76],bass:48},
@@ -11,9 +11,10 @@ export const musicPresets=[
  {id:'music-sad',label:'슬픈',icon:'🌧️',bpm:60,notes:[69,64,67,65,64,62,59,57],bass:45},
 ] as const;
 export function effectiveMusic(p:DrawingProject,s:DrawingScene):DrawingMusic|null{return s.music===undefined?p.music??null:s.music;}
+export function musicPlaybackKey(s:DrawingScene){return s.musicGroup??(s.music===undefined?'all':s.id);}
 export function validMusicSource(v:unknown):v is string{return typeof v==='string'&&v.length<=4_000_100&&/^data:audio\/(mpeg|mp3|wav|x-wav|wave|mp4|x-m4a|aac|ogg|webm|flac);base64,[A-Za-z0-9+/]+={0,2}$/.test(v);}
 export function validateMusic(p:Record<string,unknown>):boolean{
- const assets=p.musicAssets??[];if(!Array.isArray(assets)||assets.length>6)return false;
+ const assets=p.musicAssets??[];if(!Array.isArray(assets)||assets.length>24)return false;
  const ids=new Set<string>(musicPresets.map(t=>t.id));let bytes=0;
  for(const a of assets){if(!a||typeof a!=='object'||typeof a.id!=='string'||!a.id.startsWith('audio-')||a.id.length>150||ids.has(a.id)||typeof a.name!=='string'||a.name.length>80||!validMusicSource(a.source)||typeof a.duration!=='number'||!Number.isFinite(a.duration)||a.duration<=0||a.duration>120)return false;ids.add(a.id);bytes+=a.source.length;}
  if(bytes>MUSIC_TOTAL_LIMIT)return false;
@@ -21,10 +22,10 @@ export function validateMusic(p:Record<string,unknown>):boolean{
  return valid(p.music)&&Array.isArray(p.scenes)&&p.scenes.every(s=>s&&typeof s==='object'&&valid(s.music));
 }
 export function applyMusic(p:DrawingProject,music:DrawingMusic|null,all:boolean,asset?:DrawingMusicAsset):DrawingProject{
- const next={...p,music:all?music:p.music,scenes:p.scenes.map(s=>all?{...s,music:undefined}:s.id===p.activeSceneId?{...s,music}:s)};
+ const next={...p,music:all?music:p.music,scenes:p.scenes.map(s=>all?{...s,music:undefined,musicGroup:undefined}:s.id===p.activeSceneId?{...s,music,musicGroup:undefined}:s)};
  const used=new Set([next.music?.trackId,...next.scenes.map(s=>s.music?.trackId)]);
  next.musicAssets=[...(p.musicAssets??[]),...(asset&&!(p.musicAssets??[]).some(a=>a.id===asset.id)?[asset]:[])].filter(a=>used.has(a.id));
- if(next.musicAssets.reduce((n,a)=>n+a.source.length,0)>MUSIC_TOTAL_LIMIT||next.musicAssets.length>6)throw new Error('작품의 음악은 모두 합쳐 6MB, 6개까지예요. 다른 장면의 음악을 빼고 다시 골라 주세요.');
+ if(next.musicAssets.reduce((n,a)=>n+a.source.length,0)>MUSIC_TOTAL_LIMIT||next.musicAssets.length>24)throw new Error('작품의 음악은 모두 합쳐 18MB, 24개까지예요. 다른 장면의 음악을 빼고 다시 골라 주세요.');
  return next;
 }
 function synthWave(id:string):ArrayBuffer{
@@ -53,7 +54,7 @@ export class DrawingMusicPlayer{
  private element(){if(!this.audio){this.audio=new Audio();this.audio.dataset.moakitMusic='true';this.audio.preload='auto';}return this.audio;}
  play(p:DrawingProject,s:DrawingScene,onError:(message:string)=>void,onEnded?:()=>void){
   const m=effectiveMusic(p,s);if(!m){this.stop();return;}
-  const key=`${s.music===undefined?'all':s.id}:${m.trackId}`;
+  const key=`${musicPlaybackKey(s)}:${m.trackId}`;
   if(this.key!==key){this.stop();this.key=key;const next=this.element(),asset=p.musicAssets?.find(a=>a.id===m.trackId);if(this.generatedUrl){URL.revokeObjectURL(this.generatedUrl);this.generatedUrl=null;}if(asset)next.src=asset.source;else{this.generatedUrl=URL.createObjectURL(synthMusic(m.trackId));next.src=this.generatedUrl;}}
   const audio=this.element();
   audio.onended=onEnded??null;audio.volume=m.volume;audio.loop=m.loop;const generation=++this.generation;

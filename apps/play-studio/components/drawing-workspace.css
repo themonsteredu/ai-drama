@@ -200,3 +200,5 @@
 }
 
 .draw-stage-heading-actions{display:flex;align-items:center;gap:6px;flex-shrink:0}.drawing-app .draw-stage-heading-actions button{min-height:36px;padding:5px 9px;white-space:nowrap;font-size:12px}.drawing-app .draw-stage-heading-actions .draw-delete-scene{color:#a43939;border-color:#ead4d4;background:#fff}
+
+@media(max-width:759px){.story-studio .story-header-actions>.story-transfer-button{display:inline-flex;align-items:center;justify-content:center;min-height:44px;font-size:13px;padding:8px 10px}.story-studio .story-header-actions{flex-wrap:wrap}}
