@@ -96,7 +96,7 @@ export function useDrawingEditor(storageKey='active',initialProject=emptyDrawing
   function up(e:ReactPointerEvent<HTMLCanvasElement>){const d=drag.current;if(!d||d.pointerId!==e.pointerId)return;drag.current=null;if(d.moved){past.current=[...past.current.slice(-29),d.start];future.current=[];setValue({...projectRef.current,updatedAt:new Date().toISOString()});}}
   function cancel(){if(drag.current){setValue(drag.current.start);drag.current=null;}}
   async function importWork(file:File){setBusy(true);try{if(file.size>DRAWING_FILE_LIMIT)throw new Error('작품 파일은 320MB 이하로 골라 주세요.');const next=parseDrawingFile(await file.text());await loadDrawingImages(next.assets);if(!confirm('불러온 작품으로 바꿀까요? 현재 작품은 먼저 파일로 보관해 주세요.'))return;setBlocked(false);commit(()=>next);setError('');setSelectedId(undefined);setDestination(false);}catch(cause){setError(cause instanceof Error?cause.message:'작품을 읽지 못했어요.');}finally{setBusy(false);}}
-  function backup(){const blob=new Blob([JSON.stringify(project)],{type:'application/json'});if(blob.size>DRAWING_FILE_LIMIT){setError('작품 파일이 128MB를 넘어요. 사용하지 않는 그림이나 음악을 줄여 주세요.');return;}downloadBlob(blob,`${fileName(project.title)}.moakit-drawing.json`);}
+  function backup(){const blob=new Blob([JSON.stringify(project)],{type:'application/json'});if(blob.size>DRAWING_FILE_LIMIT){setError('작품 파일이 320MB를 넘어요. 사용하지 않는 그림이나 음악을 줄여 주세요.');return;}downloadBlob(blob,`${fileName(project.title)}.moakit-drawing.json`);}
   async function startVoice(){
     if(!loaded||recording||session.current)return;
     stop();setError('');setRecordSeconds(0);
