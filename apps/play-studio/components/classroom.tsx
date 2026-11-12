@@ -4,7 +4,7 @@ import {DrawingStudio} from './drawing-studio';
 import {ClassroomWorkBar,localClassState,saveClassState} from './classroom-work';
 import {GroupProjectDialog} from './group-project-dialog';
 import {GroupMovieDialog} from './group-movie-dialog';
-import {classApi,classStorageKey,readClassProject,type Classroom as Room,type ClassGroup} from '@/lib/play-class-client';
+import {ClassError,classApi,classStorageKey,readClassProject,type Classroom as Room,type ClassGroup} from '@/lib/play-class-client';
 import {loadDrawing,saveDrawing} from '@/lib/drawing-storage';
 import {emptyDrawingProject,type DrawingProject} from '@/lib/drawing-project';
 import type {GroupWork} from '@/lib/group-project';
@@ -15,7 +15,7 @@ export function Classroom({teacherMode=false}:{teacherMode?:boolean}){
  const [ready,setReady]=useState(false),[teacher,setTeacher]=useState(false),[pin,setPin]=useState(''),[code,setCode]=useState(''),[room,setRoom]=useState<Room|null>(null),[rooms,setRooms]=useState<Room[]>([]),[groups,setGroups]=useState<ClassGroup[]>([]),[picked,setPicked]=useState<number[]>([]),[work,setWork]=useState<Work|null>(null);
  const [title,setTitle]=useState('우리 반 이야기'),[groupCount,setGroupCount]=useState(6),[busy,setBusy]=useState(false),[error,setError]=useState(''),[merged,setMerged]=useState(false),[mergeWorks,setMergeWorks]=useState<GroupWork[]|null>(null),[videos,setVideos]=useState(false),[preview,setPreview]=useState(false),[refresh,setRefresh]=useState('');
  const lock=useRef(false),alive=useRef(true);
- async function run(fn:()=>Promise<void>){if(lock.current)return;lock.current=true;setBusy(true);setError('');try{await fn();}catch(cause){setError(cause instanceof Error?cause.message:'다시 눌러 주세요.');}finally{lock.current=false;setBusy(false);}}
+ async function run(fn:()=>Promise<void>){if(lock.current)return;lock.current=true;setBusy(true);setError('');try{await fn();}catch(cause){setError(cause instanceof Error?cause.message:'다시 눌러 주세요.');if(teacherMode&&cause instanceof ClassError&&cause.status===401)setTeacher(false);}finally{lock.current=false;setBusy(false);}}
  async function list(){const r=await classApi<{rooms:Room[]}>({action:'list'});setRooms(r.rooms);}
  async function roster(id:string){const r=await classApi<{room:Room;groups:ClassGroup[]}>({action:'roster',classId:id});setRoom(r.room);setGroups(r.groups);setRefresh(new Date().toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit',second:'2-digit'}));}
  async function enter(classId:string,group:number,force=false){
@@ -26,7 +26,7 @@ export function Classroom({teacherMode=false}:{teacherMode?:boolean}){
   setRoom(r.room);setWork({room:r.room,group,revision,dirty,conflict:dirty&&revision!==r.revision,key:Date.now()});
  }
  useEffect(()=>{alive.current=true;void (async()=>{try{const s=await classApi<{teacher:boolean;student:{classId:string;group:number}|null}>({action:'session'});if(!alive.current)return;setTeacher(s.teacher);if(teacherMode&&s.teacher)await list();else if(!teacherMode&&s.student)await enter(s.student.classId,s.student.group);}catch(cause){if(alive.current)setError(cause instanceof Error?cause.message:'연결을 확인해 주세요.');}finally{if(alive.current)setReady(true);}})();return()=>{alive.current=false;};},[teacherMode]);
- useEffect(()=>{if(!teacherMode||!teacher||!room||merged)return;let running=false,gone=false;const id=room.id;const timer=setInterval(()=>{if(document.hidden||running||lock.current)return;running=true;void classApi<{room:Room;groups:ClassGroup[]}>({action:'roster',classId:id}).then(r=>{if(!gone){setRoom(r.room);setGroups(r.groups);setRefresh(new Date().toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit',second:'2-digit'}));}}).catch(cause=>{if(!gone)setError(cause instanceof Error?cause.message:'현황 연결을 확인해 주세요.');}).finally(()=>{running=false;});},5000);return()=>{gone=true;clearInterval(timer);};},[teacherMode,teacher,room?.id,merged]);
+ useEffect(()=>{if(!teacherMode||!teacher||!room||merged)return;let running=false,gone=false;const id=room.id;const timer=setInterval(()=>{if(document.hidden||running||lock.current)return;running=true;void classApi<{room:Room;groups:ClassGroup[]}>({action:'roster',classId:id}).then(r=>{if(!gone){setRoom(r.room);setGroups(r.groups);setRefresh(new Date().toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit',second:'2-digit'}));}}).catch(cause=>{if(!gone){setError(cause instanceof Error?cause.message:'현황 연결을 확인해 주세요.');if(cause instanceof ClassError&&cause.status===401)setTeacher(false);}}).finally(()=>{running=false;});},5000);return()=>{gone=true;clearInterval(timer);};},[teacherMode,teacher,room?.id,merged]);
  async function login(){await classApi({action:'teacher-login',pin});setPin('');setTeacher(true);await list();}
  async function join(n:number){if(!room)return;await classApi({action:'join',code:room.code,group:n});await enter(room.id,n);}
  async function collect(){if(!room)return;const works:GroupWork[]=[];for(const n of picked){const r=await classApi<{url:string|null}>({action:'work',classId:room.id,group:n});if(!r.url)throw new Error(`${n}모둠은 아직 저장한 장면이 없어요.`);works.push({id:`${room.id}-${n}`,name:`${n}모둠`,project:await readClassProject(r.url)});}setMergeWorks(works);}
