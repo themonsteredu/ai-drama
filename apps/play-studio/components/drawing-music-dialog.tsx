@@ -3,9 +3,9 @@ import {useEffect,useRef,useState} from 'react';
 import type {DrawingProject,DrawingScene,DrawingMusicAsset,DrawingMusic} from '@/lib/drawing-project';
 import {applyMusic,DrawingMusicPlayer,effectiveMusic,musicPresets,readMusic} from '@/lib/drawing-music';
 import './drawing-music.css';
-export function DrawingMusicDialog({project,scene,onApply,onClose}:{project:DrawingProject;scene:DrawingScene;onApply:(p:DrawingProject)=>void;onClose:()=>void}){
+export function DrawingMusicDialog({project,scene,onApply,onClose,defaultAll=false}:{project:DrawingProject;scene:DrawingScene;defaultAll?:boolean;onApply:(p:DrawingProject)=>void;onClose:()=>void}){
  const initial=effectiveMusic(project,scene),dialog=useRef<HTMLDialogElement>(null),player=useRef<DrawingMusicPlayer|null>(null),alive=useRef(true);
- const [track,setTrack]=useState(initial?.trackId??''),[volume,setVolume]=useState(initial?.volume??.3),[loop,setLoop]=useState(initial?.loop??true),[all,setAll]=useState(scene.music===undefined&&!!project.music);
+ const [track,setTrack]=useState(initial?.trackId??''),[volume,setVolume]=useState(initial?.volume??(defaultAll?.18:.3)),[loop,setLoop]=useState(initial?.loop??true),[all,setAll]=useState(defaultAll||(scene.music===undefined&&!!project.music));
  const [upload,setUpload]=useState<DrawingMusicAsset>(),[busy,setBusy]=useState(false),[error,setError]=useState(''),[preview,setPreview]=useState(false);
  useEffect(()=>{alive.current=true;const previous=document.activeElement as HTMLElement|null;dialog.current?.showModal();const hidden=()=>{if(document.hidden){player.current?.pause();setPreview(false);}};document.addEventListener('visibilitychange',hidden);return()=>{alive.current=false;player.current?.dispose();document.removeEventListener('visibilitychange',hidden);previous?.focus();};},[]);
  function stopPreview(){player.current?.stop();setPreview(false);}

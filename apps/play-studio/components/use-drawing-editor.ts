@@ -1,75 +1,102 @@
 'use client';
 import {useEffect,useRef,useState,type PointerEvent as ReactPointerEvent} from 'react';
-import {bounded,drawingId,emptyDrawingProject,newDrawingScene,parseDrawingFile,DRAWING_FILE_LIMIT,type DrawingProject,type DrawingAsset,type DrawingItem,type DrawingScene} from '@/lib/drawing-project';
+import {bounded,drawingId,emptyDrawingProject,newDrawingScene,parseDrawingFile,DRAWING_FILE_LIMIT,DRAWING_MAX_SCENES,DRAWING_MAX_ASSETS,DRAWING_ASSET_BYTES,type DrawingProject,type DrawingAsset,type DrawingItem,type DrawingScene} from '@/lib/drawing-project';
 import {DrawingMusicPlayer} from '@/lib/drawing-music';
 import {applyVoice,startVoiceRecording,VoicePlayer,VOICE_MAX_SECONDS,type VoiceSession} from '@/lib/drawing-voice';
-import {sceneSeconds,VOICE_LEAD} from '@/lib/drawing-movie';
+import {sceneSeconds,movieTimeline} from '@/lib/drawing-movie';
+import {activeNarration} from '@/lib/film-narration';
 import {loadDrawing,saveDrawing} from '@/lib/drawing-storage';
 import {loadDrawingImages} from '@/lib/drawing-media';
 import {drawDrawingScene,hitDrawing} from '@/lib/drawing-renderer';
 import {downloadBlob,fileName} from '@/lib/project-files';
+import {removeDrawingAsset,removeSceneBackground,deleteDrawingScene} from '@/lib/drawing-removal';
+import {rotateSceneBackground} from '@/lib/drawing-rotation';
 
 function safeItemPoint(item:DrawingItem,asset:DrawingAsset,pos:{x:number;y:number}){
   const height=item.width*(1280/720)*(asset.height/asset.width);
-  const accentUp=item.motion==='hop'?7:item.motion==='bounce'?4:item.motion==='float'?2.5:0;
+  const accentUp=item.motion==='hop'?7+height*.06:item.motion==='bounce'?4:item.motion==='float'?2.5:item.motion==='run'?2:item.motion==='walk'?1:item.motion==='dance'?height*.05:0;
   const accentDown=item.motion==='float'?2.5:0;
   const side=bounded(item.width/2+1,2,49);
   const top=bounded(height+accentUp+1,5,96-accentDown);
   return {x:bounded(pos.x,side,100-side),y:bounded(pos.y,top,99-accentDown)};
 }
 
-export function useDrawingEditor(){
-  const [project,setProject]=useState<DrawingProject>(emptyDrawingProject),projectRef=useRef(project);
+export function useDrawingEditor(storageKey='active',initialProject=emptyDrawingProject){
+  const [project,setProject]=useState<DrawingProject>(initialProject),projectRef=useRef(project);
   const [selectedId,setSelectedId]=useState<string>(),[playing,setPlaying]=useState(false),[reset,setReset]=useState(0),[destination,setDestination]=useState(false);
   const [loaded,setLoaded]=useState(false),[blocked,setBlocked]=useState(false),[saveState,setSaveState]=useState('불러오는 중'),[error,setError]=useState(''),[busy,setBusy]=useState(false);
   const [recording,setRecording]=useState(false),[recordSeconds,setRecordSeconds]=useState(0),[storyPlaying,setStoryPlaying]=useState(false),[voicePlaying,setVoicePlaying]=useState(false);
   const musicPlayer=useRef<DrawingMusicPlayer|null>(null),voicePlayer=useRef<VoicePlayer|null>(null);
-  const session=useRef<VoiceSession|null>(null),storyTimer=useRef(0),storyOn=useRef(false);
+  const session=useRef<VoiceSession|null>(null),storyTimer=useRef(0),storyOn=useRef(false),storyEpoch=useRef(0);
   useEffect(()=>()=>{musicPlayer.current?.dispose();voicePlayer.current?.dispose();session.current?.cancel();clearTimeout(storyTimer.current);},[]);
   const clock=useRef(0),past=useRef<DrawingProject[]>([]),future=useRef<DrawingProject[]>([]);
   const drag=useRef<{id:string;pointerId:number;dx:number;dy:number;start:DrawingProject;moved:boolean}|null>(null);
   const scene=project.scenes.find(s=>s.id===project.activeSceneId)??project.scenes[0],selected=scene.items.find(i=>i.id===selectedId),selectedAsset=project.assets.find(a=>a.id===selected?.assetId);
-  useEffect(()=>{let gone=false;void loadDrawing().then(p=>{if(gone)return;if(p){projectRef.current=p;setProject(p);}}).catch(cause=>{if(!gone){setBlocked(true);setSaveState('저장 확인 필요');setError(cause instanceof Error?cause.message:'저장 내용을 읽지 못했어요.');}}).finally(()=>{if(!gone)setLoaded(true);});return()=>{gone=true;};},[]);
-  useEffect(()=>{if(!loaded||blocked)return;let canceled=false;setSaveState('저장 중');const timer=setTimeout(()=>{void saveDrawing(project).then(()=>{if(!canceled)setSaveState('이 기기에 저장됨');}).catch(()=>{if(!canceled){setSaveState('저장 확인 필요');setError('기기 저장을 마치지 못했어요. 작품 파일로 보관해 주세요.');}});},350);return()=>{canceled=true;clearTimeout(timer);};},[project,loaded,blocked]);
-  useEffect(()=>{if(!loaded||blocked)return;const flush=()=>{void saveDrawing(projectRef.current).catch(()=>{});};const hidden=()=>{if(document.visibilityState==='hidden'){pause();flush();}};window.addEventListener('pagehide',flush);document.addEventListener('visibilitychange',hidden);return()=>{window.removeEventListener('pagehide',flush);document.removeEventListener('visibilitychange',hidden);};},[loaded,blocked]);
-  function pause(){musicPlayer.current?.pause();setPlaying(false);}
+  useEffect(()=>{let gone=false;void loadDrawing(storageKey).then(p=>{if(gone)return;if(p){projectRef.current=p;setProject(p);}}).catch(cause=>{if(!gone){setBlocked(true);setSaveState('저장 확인 필요');setError(cause instanceof Error?cause.message:'저장 내용을 읽지 못했어요.');}}).finally(()=>{if(!gone)setLoaded(true);});return()=>{gone=true;};},[]);
+  useEffect(()=>{if(!loaded||blocked)return;let canceled=false;setSaveState('저장 중');const timer=setTimeout(()=>{void saveDrawing(project,storageKey).then(()=>{if(!canceled)setSaveState('이 기기에 저장됨');}).catch(()=>{if(!canceled){setSaveState('저장 확인 필요');setError('기기 저장을 마치지 못했어요. 작품 파일로 보관해 주세요.');}});},350);return()=>{canceled=true;clearTimeout(timer);};},[project,loaded,blocked]);
+  useEffect(()=>{if(!loaded||blocked)return;const flush=()=>{void saveDrawing(projectRef.current,storageKey).catch(()=>{});};const hidden=()=>{if(document.visibilityState==='hidden'){pause();flush();}};window.addEventListener('pagehide',flush);document.addEventListener('visibilitychange',hidden);return()=>{window.removeEventListener('pagehide',flush);document.removeEventListener('visibilitychange',hidden);};},[loaded,blocked]);
+  function pause(){if(storyOn.current){stop();return;}musicPlayer.current?.pause();setPlaying(false);}
   function start(){musicPlayer.current??=new DrawingMusicPlayer();musicPlayer.current.play(projectRef.current,projectRef.current.scenes.find(s=>s.id===projectRef.current.activeSceneId)!,setError);setDestination(false);setPlaying(true);}
-  function endStory(){storyOn.current=false;clearTimeout(storyTimer.current);voicePlayer.current?.stop();setVoicePlaying(false);setStoryPlaying(false);}
+  function endStory(){storyOn.current=false;storyEpoch.current++;clearTimeout(storyTimer.current);voicePlayer.current?.stop();setVoicePlaying(false);setStoryPlaying(false);}
   function stop(){endStory();musicPlayer.current?.stop();setPlaying(false);clock.current=0;setReset(n=>n+1);}
   function setValue(p:DrawingProject){projectRef.current=p;setProject(p);}
-  function commit(fn:(p:DrawingProject)=>DrawingProject){if(!loaded)return;const before=projectRef.current;const next={...fn(before),updatedAt:new Date().toISOString()};past.current=[...past.current.slice(-29),before];future.current=[];stop();setValue(next);}
+  function commit(fn:(p:DrawingProject)=>DrawingProject){if(!loaded)return;const before=projectRef.current,candidate=fn(before);if(candidate===before)return;const next={...candidate,updatedAt:new Date().toISOString()};past.current=[...past.current.slice(-29),before];future.current=[];stop();setValue(next);}
   function editScene(patch:Partial<DrawingScene>){commit(p=>({...p,scenes:p.scenes.map(s=>s.id===p.activeSceneId?{...s,...patch}:s)}));}
   function patchItem(patch:Partial<DrawingItem>){if(!selected)return;editScene({items:scene.items.map(i=>i.id===selected.id?{...i,...patch}:i)});}
   function undo(){const p=past.current.pop();if(!p)return;future.current.unshift(projectRef.current);stop();setValue(p);setSelectedId(undefined);setDestination(false);}
   function redo(){const p=future.current.shift();if(!p)return;past.current.push(projectRef.current);stop();setValue(p);setSelectedId(undefined);setDestination(false);}
   function place(asset:DrawingAsset,isNew=false){
-    if(isNew&&(project.assets.length>=12||project.assets.reduce((sum,a)=>sum+a.source.length,0)+asset.source.length>10_000_000)){setError('한 작품에 그림은 12개, 전체 용량은 약 10MB까지 보관할 수 있어요.');return false;}
+    if(isNew&&(project.assets.length>=DRAWING_MAX_ASSETS||project.assets.reduce((sum,a)=>sum+a.source.length,0)+asset.source.length>DRAWING_ASSET_BYTES)){setError('한 작품에 그림은 128개, 전체 용량은 약 96MB까지 보관할 수 있어요.');return false;}
     if(asset.kind!=='background'&&scene.items.length>=40){setError('한 장면에는 40개까지 놓을 수 있어요. 장면을 하나 더 만들어 주세요.');return false;}
     const id=drawingId('drawing');const width=bounded(38*asset.width/asset.height,10,26);
     const item:DrawingItem={id,assetId:asset.id,x:50,y:78,width,rotation:0,flipped:false,motion:asset.kind==='plant'?'sway':'still',speed:'normal',speech:''};
-    commit(p=>({...p,assets:isNew?[...p.assets,asset]:p.assets,scenes:p.scenes.map(s=>s.id!==p.activeSceneId?s:asset.kind==='background'?{...s,backgroundAssetId:asset.id}:{...s,items:[...s.items,item]})}));
+    commit(p=>({...p,assets:isNew?[...p.assets,asset]:p.assets,scenes:p.scenes.map(s=>s.id!==p.activeSceneId?s:asset.kind==='background'?{...s,backgroundAssetId:asset.id,...(s.backgroundAssetId!==asset.id?{stillOriginalAssetId:undefined,protectedMask:undefined}:{})}:{...s,items:[...s.items,item]})}));
     setError('');setSelectedId(asset.kind==='background'?undefined:id);setDestination(false);return true;
   }
   function chooseItem(id:string){stop();setSelectedId(id);setDestination(false);}
   function remove(){if(!selected)return;editScene({items:scene.items.filter(i=>i.id!==selected.id)});setSelectedId(undefined);}
+  function removeAsset(assetId:string){
+    const p=projectRef.current,asset=p.assets.find(a=>a.id===assetId);if(!asset)return;
+    const used=p.scenes.filter(s=>s.backgroundAssetId===assetId||s.stillOriginalAssetId===assetId||s.items.some(i=>i.assetId===assetId)).length;
+    if(!confirm(`“${asset.name}” 그림을 보관함에서 삭제할까요?${used?` 사용 중인 ${used}개 장면에서도 빠져요.`:''} 실행 취소로 되돌릴 수 있어요.`))return;
+    commit(value=>removeDrawingAsset(value,assetId));setSelectedId(undefined);setDestination(false);setError('');
+  }
+  function removeBackground(){commit(p=>removeSceneBackground(p,p.activeSceneId));setSelectedId(undefined);setDestination(false);}
+  async function rotateScene(direction:-1|1){
+    if(!loaded||busy||recording)return;stop();setBusy(true);setError('');const before=projectRef.current;
+    try{const next=await rotateSceneBackground(before,before.activeSceneId,direction);if(projectRef.current!==before)throw new Error('장면이 바뀌었어요. 회전 버튼을 다시 눌러 주세요.');commit(()=>next);setSelectedId(undefined);setDestination(false);}
+    catch(cause){setError(cause instanceof Error?cause.message:'그림을 회전하지 못했어요.');}finally{setBusy(false);}
+  }
   function duplicate(){if(!selected||scene.items.length>=40)return;const id=drawingId('drawing');editScene({items:[...scene.items,{...selected,id,x:bounded(selected.x+5,5,95),target:selected.target?{...selected.target}:undefined}]});setSelectedId(id);}
   function layer(delta:-1|1){if(!selected)return;const items=[...scene.items],index=items.findIndex(i=>i.id===selected.id),to=bounded(index+delta,0,items.length-1);const [item]=items.splice(index,1);items.splice(to,0,item);editScene({items});}
-  function addScene(copy=false){if(project.scenes.length>=6)return;const id=drawingId('scene');const next=copy?{...structuredClone(scene),id,title:`장면 ${project.scenes.length+1}`,items:scene.items.map(i=>({...i,id:drawingId('drawing')}))}:newDrawingScene(id,`장면 ${project.scenes.length+1}`);commit(p=>({...p,activeSceneId:id,scenes:[...p.scenes,next]}));setSelectedId(undefined);setDestination(false);}
-  function switchScene(id:string){const p=projectRef.current,s=p.scenes.find(s=>s.id===id);if(!s||id===p.activeSceneId)return;clock.current=0;setReset(n=>n+1);if(playing)musicPlayer.current?.play(p,s,setError);else musicPlayer.current?.stop();setDestination(false);setSelectedId(undefined);setValue({...p,activeSceneId:id});}
-  function deleteScene(){if(project.scenes.length===1||!confirm('이 장면을 지울까요? 실행 취소로 되돌릴 수 있어요.'))return;const scenes=project.scenes.filter(s=>s.id!==scene.id);commit(p=>({...p,scenes,activeSceneId:scenes[0].id}));setSelectedId(undefined);setDestination(false);}
-  function newWork(){if(!confirm('새 작품을 시작할까요? 지금 작품은 먼저 작품 파일로 보관해 주세요.'))return;setBlocked(false);setError('');commit(()=>({...emptyDrawingProject(),id:drawingId('project')}));setSelectedId(undefined);setDestination(false);}
+  function addScene(copy=false){if(project.scenes.length>=DRAWING_MAX_SCENES)return;const id=drawingId('scene');const next=copy?{...structuredClone(scene),id,title:`장면 ${project.scenes.length+1}`,items:scene.items.map(i=>({...i,id:drawingId('drawing')}))}:newDrawingScene(id,`장면 ${project.scenes.length+1}`);commit(p=>({...p,activeSceneId:id,scenes:[...p.scenes,next]}));setSelectedId(undefined);setDestination(false);}
+  function switchScene(id:string){const wasStory=storyOn.current;if(wasStory)stop();const p=projectRef.current,s=p.scenes.find(s=>s.id===id);if(!s||id===p.activeSceneId)return;clock.current=0;setReset(n=>n+1);if(playing&&!wasStory)musicPlayer.current?.play(p,s,setError);else musicPlayer.current?.stop();setDestination(false);setSelectedId(undefined);setValue({...p,activeSceneId:id});}
+  function deleteScene(sceneId=scene.id){const target=projectRef.current.scenes.find(s=>s.id===sceneId);if(!target||!confirm(`“${target.title}”을 지울까요? 그림과 녹음이 이 장면에서 빠져요.${projectRef.current.narration?.enabled?" 전체 녹음은 잠시 꺼지고 장면별 녹음을 사용해요.":""} 실행 취소로 되돌릴 수 있어요.`))return;commit(p=>deleteDrawingScene(p,sceneId));setSelectedId(undefined);setDestination(false);}
+  function newWork(){if(!confirm('새 작품을 시작할까요? 지금 작품은 먼저 작품 파일로 보관해 주세요.'))return;setBlocked(false);setError('');commit(()=>({...initialProject(),id:drawingId('project')}));setSelectedId(undefined);setDestination(false);}
   function point(e:ReactPointerEvent<HTMLCanvasElement>){const r=e.currentTarget.getBoundingClientRect();return {x:bounded((e.clientX-r.left)/r.width*100,0,100),y:bounded((e.clientY-r.top)/r.height*100,0,100)};}
   function down(e:ReactPointerEvent<HTMLCanvasElement>){
-    if(!loaded||playing)return;const pos=point(e);
-    if(destination&&selected&&selectedAsset){const target=safeItemPoint(selected,selectedAsset,pos);patchItem({target,motion:selected.motion==='still'?'move':selected.motion});setDestination(false);return;}
+    if(!loaded||playing||busy||recording||!e.isPrimary||e.button!==0)return;const pos=point(e);
+    if(destination&&selected&&selectedAsset){
+      e.preventDefault();drag.current=null;const id=selected.id;
+      // Keep picking until the user finishes: each tap replaces only this actor's
+      // destination, so a second tap never deselects or drags the original drawing.
+      commit(p=>{
+        const active=p.scenes.find(s=>s.id===p.activeSceneId),item=active?.items.find(i=>i.id===id),asset=p.assets.find(a=>a.id===item?.assetId);
+        if(!active||!item||!asset)return p;
+        const target=safeItemPoint(item,asset,pos),motion=item.motion==='still'?'move':item.motion;
+        if(item.target?.x===target.x&&item.target?.y===target.y&&item.motion===motion)return p;
+        return {...p,scenes:p.scenes.map(s=>s.id===active.id?{...s,items:s.items.map(i=>i.id===id?{...i,target,motion}:i)}:s)};
+      });
+      return;
+    }
     if(clock.current>0){stop();return;}
     const item=hitDrawing(project,scene,pos.x,pos.y);setSelectedId(item?.id);if(!item)return;e.preventDefault();e.currentTarget.setPointerCapture(e.pointerId);drag.current={id:item.id,pointerId:e.pointerId,dx:pos.x-item.x,dy:pos.y-item.y,start:projectRef.current,moved:false};
   }
   function move(e:ReactPointerEvent<HTMLCanvasElement>){const d=drag.current;if(!d||d.pointerId!==e.pointerId)return;const pos=point(e);d.moved=true;const p=projectRef.current;setValue({...p,scenes:p.scenes.map(s=>s.id===p.activeSceneId?{...s,items:s.items.map(i=>{if(i.id!==d.id)return i;const asset=p.assets.find(a=>a.id===i.assetId);const raw={x:pos.x-d.dx,y:pos.y-d.dy};const next=asset?safeItemPoint(i,asset,raw):{x:bounded(raw.x,2,98),y:bounded(raw.y,5,98)};return {...i,...next};})}:s)});}
   function up(e:ReactPointerEvent<HTMLCanvasElement>){const d=drag.current;if(!d||d.pointerId!==e.pointerId)return;drag.current=null;if(d.moved){past.current=[...past.current.slice(-29),d.start];future.current=[];setValue({...projectRef.current,updatedAt:new Date().toISOString()});}}
   function cancel(){if(drag.current){setValue(drag.current.start);drag.current=null;}}
-  async function importWork(file:File){setBusy(true);try{if(file.size>DRAWING_FILE_LIMIT)throw new Error('작품 파일은 20MB 이하로 골라 주세요.');const next=parseDrawingFile(await file.text());await loadDrawingImages(next.assets);if(!confirm('불러온 작품으로 바꿀까요? 현재 작품은 먼저 파일로 보관해 주세요.'))return;setBlocked(false);commit(()=>next);setError('');setSelectedId(undefined);setDestination(false);}catch(cause){setError(cause instanceof Error?cause.message:'작품을 읽지 못했어요.');}finally{setBusy(false);}}
-  function backup(){const blob=new Blob([JSON.stringify(project)],{type:'application/json'});if(blob.size>DRAWING_FILE_LIMIT){setError('작품 파일이 20MB를 넘어요. 사용하지 않는 그림이나 음악을 줄여 주세요.');return;}downloadBlob(blob,`${fileName(project.title)}.moakit-drawing.json`);}
+  async function importWork(file:File){setBusy(true);try{if(file.size>DRAWING_FILE_LIMIT)throw new Error('작품 파일은 320MB 이하로 골라 주세요.');const next=parseDrawingFile(await file.text());await loadDrawingImages(next.assets);if(!confirm('불러온 작품으로 바꿀까요? 현재 작품은 먼저 파일로 보관해 주세요.'))return;setBlocked(false);commit(()=>next);setError('');setSelectedId(undefined);setDestination(false);}catch(cause){setError(cause instanceof Error?cause.message:'작품을 읽지 못했어요.');}finally{setBusy(false);}}
+  function backup(){const blob=new Blob([JSON.stringify(project)],{type:'application/json'});if(blob.size>DRAWING_FILE_LIMIT){setError('작품 파일이 320MB를 넘어요. 사용하지 않는 그림이나 음악을 줄여 주세요.');return;}downloadBlob(blob,`${fileName(project.title)}.moakit-drawing.json`);}
   async function startVoice(){
     if(!loaded||recording||session.current)return;
     stop();setError('');setRecordSeconds(0);
@@ -99,21 +126,44 @@ export function useDrawingEditor(){
     const p=projectRef.current,next=p.scenes[index];
     if(!next){stop();return;}
     clock.current=0;setReset(n=>n+1);setValue({...p,activeSceneId:next.id});
-    musicPlayer.current??=new DrawingMusicPlayer();
-    musicPlayer.current.play({...p,activeSceneId:next.id},next,setError);
-    const voice=next.voice;
+    const voice=next.voice,epoch=storyEpoch.current;
+    const current=()=>storyOn.current&&storyEpoch.current===epoch;
+    const begin=()=>{if(!current())return;setPlaying(true);musicPlayer.current??=new DrawingMusicPlayer();musicPlayer.current.play({...p,activeSceneId:next.id},next,setError);};
     if(voice){
+      setPlaying(false);setVoicePlaying(true);
       voicePlayer.current??=new VoicePlayer();
-      window.setTimeout(()=>{if(storyOn.current){setVoicePlaying(true);voicePlayer.current?.play(voice,setError,()=>setVoicePlaying(false));}},VOICE_LEAD*1000);
+      // Wait for actual playback to end, including buffering, instead of cutting speech with a wall-clock timer.
+      voicePlayer.current.play(voice,message=>{if(current()){setError(message);stop();}},()=>{
+        if(!current())return;setVoicePlaying(false);
+        const hold=Math.max(0,sceneSeconds(next)-voice.duration);
+        storyTimer.current=window.setTimeout(()=>{if(current())runScene(index+1);},hold*1000);
+      },begin);
+    }else{
+      setVoicePlaying(false);begin();storyTimer.current=window.setTimeout(()=>{if(current())runScene(index+1);},sceneSeconds(next)*1000);
     }
-    storyTimer.current=window.setTimeout(()=>runScene(index+1),sceneSeconds(next)*1000);
   }
   function playStory(){
     if(!loaded||recording||!project.scenes.length)return;
     stop();setError('');setSelectedId(undefined);setDestination(false);
-    storyOn.current=true;setStoryPlaying(true);setPlaying(true);runScene(0);
+    storyOn.current=true;setStoryPlaying(true);
+    const narration=activeNarration(projectRef.current);
+    if(!narration){setPlaying(true);runScene(0);return;}
+    const plan=movieTimeline(projectRef.current),epoch=storyEpoch.current;let last=-1,endedAt:number|null=null;
+    voicePlayer.current??=new VoicePlayer();setVoicePlaying(true);
+    voicePlayer.current.play(narration,message=>{setError(message);stop();},()=>{endedAt=performance.now();setVoicePlaying(false);},()=>{
+     if(!storyOn.current||storyEpoch.current!==epoch)return;
+     setPlaying(true);
+     const tick=()=>{
+      if(!storyOn.current||storyEpoch.current!==epoch)return;
+      const time=endedAt===null?voicePlayer.current!.currentTime:narration.duration+(performance.now()-endedAt)/1000;
+      const index=plan.findIndex(s=>time<s.at+s.seconds);
+      if(index<0){stop();return;}
+      if(index!==last){last=index;const p=projectRef.current,step=plan[index];clock.current=Math.max(0,time-step.at);setReset(n=>n+1);setValue({...p,activeSceneId:step.scene.id});musicPlayer.current??=new DrawingMusicPlayer();musicPlayer.current.play(p,step.scene,setError);}
+      storyTimer.current=window.setTimeout(tick,40);
+     };tick();
+    });
   }
   async function png(){setBusy(true);try{const snapshot=projectRef.current,current=snapshot.scenes.find(s=>s.id===snapshot.activeSceneId)!;const images=await loadDrawingImages(snapshot.assets);await document.fonts.ready;const c=document.createElement('canvas');c.width=2560;c.height=1440;const ctx=c.getContext('2d');if(!ctx)throw new Error('이미지를 만들지 못했어요.');ctx.scale(2,2);drawDrawingScene(ctx,snapshot,current,images,clock.current);const blob=await new Promise<Blob>((resolve,reject)=>c.toBlob(b=>b?resolve(b):reject(new Error('저장에 실패했어요.')),'image/png'));downloadBlob(blob,`${fileName(snapshot.title)}-${fileName(current.title)}.png`);}catch(cause){setError(cause instanceof Error?cause.message:'이미지를 만들지 못했어요.');}finally{setBusy(false);}}
   return {recording,recordSeconds,startVoice,finishVoice,playVoice,stopVoice,removeVoice,voicePlaying,storyPlaying,playStory,maxVoiceSeconds:VOICE_MAX_SECONDS,
-    project,scene,selected,selectedAsset,selectedId,playing,start,pause,reset,clock,destination,setDestination,loaded,blocked,saveState,error,setError,busy,commit,stop,editScene,patchItem,undo,redo,canUndo:past.current.length>0,canRedo:future.current.length>0,place,chooseItem,remove,duplicate,layer,addScene,switchScene,deleteScene,newWork,down,move,up,cancel,importWork,backup,png};
+    project,scene,selected,selectedAsset,selectedId,playing,start,pause,reset,clock,destination,setDestination,loaded,blocked,saveState,error,setError,busy,commit,stop,editScene,patchItem,undo,redo,canUndo:past.current.length>0,canRedo:future.current.length>0,place,chooseItem,remove,removeAsset,removeBackground,rotateScene,duplicate,layer,addScene,switchScene,deleteScene,newWork,down,move,up,cancel,importWork,backup,png};
 }

@@ -1,18 +1,23 @@
 import type {DrawingProject,DrawingScene} from '../../../packages/stage-core/src/drawing';
 import {drawDrawingScene,DRAW_WIDTH,DRAW_HEIGHT,type RasterCache} from './drawing-renderer';
-import {effectiveMusic} from './drawing-music';
+import {effectiveMusic,musicPlaybackKey,synthMusic} from './drawing-music';
+import {activeNarration,narrationDurations} from './film-narration';
+import {createTransitionPainter,incomingTransition} from './drawing-transition';
 
-/** A scene lasts as long as its voice, plus a breath. Silent scenes get a readable default. */
-export const SCENE_PAD=.7,SCENE_MIN=2.5,SCENE_SILENT=4,VOICE_LEAD=.25;
+/** Automatic scenes start with their recording and cut when that recording ends. */
+export const SCENE_PAD=0,SCENE_MIN=2.5,SCENE_SILENT=4,VOICE_LEAD=0;
 export function sceneSeconds(scene:DrawingScene){
- return Math.max(SCENE_MIN,scene.voice?scene.voice.duration+VOICE_LEAD+SCENE_PAD:SCENE_SILENT);
+ const minimum=scene.voice?scene.voice.duration:scene.durationSeconds!==undefined?1:SCENE_MIN;
+ return Math.max(minimum,scene.durationSeconds??scene.voice?.duration??SCENE_SILENT);
 }
-export function movieSeconds(project:DrawingProject){
- return project.scenes.reduce((sum,scene)=>sum+sceneSeconds(scene),0);
+export function movieTimeline(project:DrawingProject){
+ const durations=narrationDurations(project);let at=0;
+ return project.scenes.map((scene,index)=>{const seconds=durations?.[index]??sceneSeconds(scene),step={scene,seconds,at};at+=seconds;return step;});
 }
+export function movieSeconds(project:DrawingProject){return movieTimeline(project).reduce((n,s)=>n+s.seconds,0);}
 export function clockLabel(seconds:number){
- const whole=Math.max(0,Math.round(seconds));
- return `${Math.floor(whole/60)}분 ${String(whole%60).padStart(2,'0')}초`;
+ const rounded=Math.max(0,Math.round(seconds*100)/100),minutes=Math.floor(rounded/60),rest=Number((rounded-minutes*60).toFixed(2));
+ return `${minutes}분 ${rest<10?'0':''}${rest}초`;
 }
 
 // H.264 MP4 travels furthest — school computers, Padlet, messengers — so ask for it by name first.
@@ -40,6 +45,8 @@ function musicSource(project:DrawingProject,scene:DrawingScene){
  return {url:asset?asset.source:`/play-music/${music.trackId}.wav`,volume:music.volume,loop:music.loop};
 }
 async function decode(context:AudioContext,url:string){
+ const preset=/^\/play-music\/(music-[a-z]+)\.wav$/.exec(url);
+ if(preset)return context.decodeAudioData(await synthMusic(preset[1]).arrayBuffer());
  const response=await fetch(url);
  if(!response.ok)throw new Error('소리를 읽지 못했어요.');
  return context.decodeAudioData(await response.arrayBuffer());
@@ -112,7 +119,8 @@ export async function recordMovie(project:DrawingProject,images:RasterCache,onPr
  const chunks:Blob[]=[];
  let recorder:MediaRecorder|null=null;
  const sources:AudioBufferSourceNode[]=[];
- const cleanup=()=>{sources.forEach(s=>{try{s.stop();}catch{}});void context.close().catch(()=>{});};
+ const captureTracks:MediaStreamTrack[]=[];
+ const cleanup=()=>{sources.forEach(s=>{try{s.stop();}catch{}});captureTracks.forEach(track=>track.stop());void context.close().catch(()=>{});};
  try{
   await context.resume().catch(()=>{});
   onProgress(0,'소리를 준비하고 있어요…');
@@ -121,24 +129,36 @@ export async function recordMovie(project:DrawingProject,images:RasterCache,onPr
   let lostVoices=0;
   const plan:{scene:DrawingScene;at:number;seconds:number;music:ReturnType<typeof musicSource>;voice:AudioBuffer|null}[]=[];
   let at=0;
-  for(const scene of project.scenes){
+  const narration=activeNarration(project);
+  const fullVoice=narration?await decodeQuietly(context,narration.source):null;
+  if(narration&&!fullVoice)throw new Error('전체 녹음을 읽지 못했어요. 녹음을 다시 올려 주세요.');
+  for(const step of movieTimeline(project)){
+   const {scene,seconds}=step;
    const music=musicSource(project,scene);
    if(music&&!cache.has(music.url))cache.set(music.url,await decodeQuietly(context,music.url));
+   if(music&&!cache.get(music.url))throw new Error('배경음악을 읽지 못했어요. 음악을 다시 선택해 주세요.');
    let voice:AudioBuffer|null=null;
-   if(scene.voice){
+   if(scene.voice&&!narration){
     if(!cache.has(scene.voice.source))cache.set(scene.voice.source,await decodeQuietly(context,scene.voice.source));
     voice=cache.get(scene.voice.source)??null;
-    if(!voice)lostVoices+=1;
+    if(!voice)throw new Error(`${scene.title}의 대사 파일을 읽지 못했어요. 대사가 빠진 영상은 저장하지 않았어요. 녹음 파일을 다시 넣어 주세요.`);
    }
-   plan.push({scene,at,seconds:sceneSeconds(scene),music,voice});
-   at+=sceneSeconds(scene);
+   plan.push({scene,at,seconds,music,voice});
+   at+=seconds;
   }
   if(canceled())throw new Error('영상 만들기를 그만두었어요.');
 
   const destination=context.createMediaStreamDestination();
+  // An unconnected audio destination may never emit a frame. Some Chrome encoders
+  // then wait forever for audio and return only a WebM header, even with valid video.
+  // Feed continuous digital silence so silent scenes and gaps also have timestamps.
+  const silence=context.createBufferSource();silence.buffer=context.createBuffer(1,context.sampleRate,context.sampleRate);
+  silence.loop=true;silence.connect(destination);silence.start();sources.push(silence);
   const monitor=context.createGain();monitor.gain.value=1;monitor.connect(context.destination);
   const stream=canvas.captureStream(30);
+  const videoTrack=stream.getVideoTracks()[0] as CanvasCaptureMediaStreamTrack|undefined;
   const tracks=[...stream.getVideoTracks(),...destination.stream.getAudioTracks()];
+  captureTracks.push(...tracks);
   if(!tracks.length)throw new Error('이 기기에서는 영상 파일을 만들 수 없어요. 아래 「화면 녹화로 만들기」를 눌러 주세요.');
   recorder=new MediaRecorder(new MediaStream(tracks),{mimeType,videoBitsPerSecond:1_800_000,audioBitsPerSecond:128_000});
   recorder.ondataavailable=event=>{if(event.data?.size)chunks.push(event.data);};
@@ -152,40 +172,55 @@ export async function recordMovie(project:DrawingProject,images:RasterCache,onPr
   // One blob, no timeslice: asking for chunks makes Chrome drop the header's Duration
   // field altogether, and the saved movie then reports no length at all.
   recorder.start();
-  const base=context.currentTime+.15;
+  videoTrack?.requestFrame?.();
+  const base=context.currentTime;
+  // Adjacent scenes with the same soundtrack share one source, so music never restarts at each cut.
+  const musicRuns:{key:string;music:NonNullable<ReturnType<typeof musicSource>>;at:number;seconds:number}[]=[];
   for(const step of plan){
-   if(step.music){
-    const buffer=cache.get(step.music.url);
-    if(buffer)sources.push(schedule(context,destination,buffer,base+step.at,step.seconds,step.music.volume,step.music.loop));
-    if(buffer)sources.push(schedule(context,monitor,buffer,base+step.at,step.seconds,step.music.volume,step.music.loop));
-   }
+   if(!step.music)continue;
+   const last=musicRuns[musicRuns.length-1];
+   const key=musicPlaybackKey(step.scene);
+   if(last&&last.key===key&&Math.abs(last.at+last.seconds-step.at)<.001&&JSON.stringify(last.music)===JSON.stringify(step.music))last.seconds+=step.seconds;
+   else musicRuns.push({key,music:step.music,at:step.at,seconds:step.seconds});
+  }
+  for(const run of musicRuns){
+   const buffer=cache.get(run.music.url);
+   if(buffer){sources.push(schedule(context,destination,buffer,base+run.at,run.seconds,run.music.volume,run.music.loop));sources.push(schedule(context,monitor,buffer,base+run.at,run.seconds,run.music.volume,run.music.loop));}
+  }
+  if(fullVoice){sources.push(schedule(context,destination,fullVoice,base,total,1,false));sources.push(schedule(context,monitor,fullVoice,base,total,1,false));}
+  for(const step of plan){
    if(step.voice){
     sources.push(schedule(context,destination,step.voice,base+step.at+VOICE_LEAD,step.seconds,1,false));
     sources.push(schedule(context,monitor,step.voice,base+step.at+VOICE_LEAD,step.seconds,1,false));
    }
   }
 
-  const startedAt=performance.now()+150;
   await new Promise<void>((resolve,reject)=>{
-   let frame=0;
+   const paintTransition=createTransitionPainter();
+   let timer=0;
    const paint=()=>{
-    if(canceled()){cancelAnimationFrame(frame);reject(new Error('영상 만들기를 그만두었어요.'));return;}
-    const elapsed=(performance.now()-startedAt)/1000;
+    if(canceled()){clearTimeout(timer);reject(new Error('영상 만들기를 그만두었어요.'));return;}
+    // Use the same clock that schedules the dialogue; rendering delays must not advance the cut early.
+    const elapsed=context.currentTime-base;
     if(elapsed>=total){resolve();return;}
     const index=Math.max(0,plan.findIndex(step=>elapsed<step.at+step.seconds));
     const step=plan[index<0?plan.length-1:index];
-    drawDrawingScene(ctx,project,step.scene,images,Math.max(0,elapsed-step.at));
+    const localSeconds=Math.max(0,elapsed-step.at);
+    if(!paintTransition(ctx,project,step.scene,images,localSeconds,incomingTransition(plan,index)))drawDrawingScene(ctx,project,step.scene,images,localSeconds);
+    videoTrack?.requestFrame?.();
     onProgress(Math.min(.99,Math.max(0,elapsed)/total),`${index+1} / ${plan.length} 장면을 담는 중…`);
-    frame=requestAnimationFrame(paint);
+    // Off-screen canvas animation frames may be throttled to 1 fps. Capture on an
+    // audio-clock timer instead, waking at the next cut/end even between frames.
+    timer=window.setTimeout(paint,Math.max(1,Math.min(1000/30,(step.at+step.seconds-elapsed)*1000)));
    };
-   frame=requestAnimationFrame(paint);
+   paint();
   });
 
   onProgress(.99,'영상을 마무리하는 중…');
   recorder.stop();
   await stopped;
   const raw=new Blob(chunks,{type:recorder.mimeType||mimeType});
-  if(!raw.size)throw new Error('영상이 비어 있어요. 이 기기에서는 「화면 녹화로 만들기」를 써 주세요.');
+  if(raw.size<1024)throw new Error('영상에 장면이 담기지 않았어요. 다시 저장하거나 「화면 녹화로 만들기」를 써 주세요.');
   const blob=await stampWebmDuration(raw,total).catch(()=>raw);
   return {blob,extension:movieExtension(recorder.mimeType||mimeType),seconds:total,lostVoices};
  }finally{
