@@ -12,14 +12,24 @@ try{
  process.env.NEXT_PUBLIC_SUPABASE_URL='https://class.test';process.env.SUPABASE_SERVICE_ROLE_KEY='qa-private-secret';process.env.PLAY_SETTINGS_PIN='3035';
  const load=createRequire(path.join(temp,'entry.js')),server=load('./apps/play-studio/lib/play-class-server.js'),route=load('./apps/play-studio/app/api/play-class/route.js'),{emptyDrawingProject}=load('./apps/play-studio/lib/drawing-project.js');
  const id='10000000-0000-4000-8000-000000000001',room={id,code:'123456',title:'교실',group_count:2,is_open:true},groups=[1,2].map(n=>({class_id:id,group_no:n,revision:0,object_path:null,submitted:false}));
- let uploaded=JSON.stringify(emptyDrawingProject()),race=false,cleanup=0;
+ let uploaded=JSON.stringify(emptyDrawingProject()),race=false,cleanup=0,otherSavedGroups=[];
  global.fetch=async(url,options={})=>{
   url=String(url);const b=options.body?JSON.parse(options.body):{};
   if(url.includes('/rpc/play_film_pin_attempt')||url.includes('/rpc/play_film_rate_limit'))return Response.json(true);
   if(url.includes('/rpc/play_create_class')){assert.match(b.p_code,/^\d{6}$/);return Response.json([room]);}
   if(url.includes('/rpc/play_save_group')){const g=groups[b.p_group-1];if(race||g.revision!==b.p_revision||!room.is_open)return Response.json([]);Object.assign(g,{revision:g.revision+1,object_path:b.p_path,summary:b.p_summary,submitted:b.p_submitted});return Response.json([g]);}
   if(url.includes('/rest/v1/play_classrooms')){if(url.includes('code=eq.')&&!url.includes('code=eq.123456'))return Response.json([]);if(options.method==='PATCH')Object.assign(room,b);return Response.json([room]);}
-  if(url.includes('/rest/v1/play_class_groups')){const n=Number(/group_no=eq.(\d+)/.exec(url)?.[1]);return Response.json(n?[groups[n-1]]:groups);}
+  if(url.includes('/rest/v1/play_class_groups')){
+   const params=new URL(url).searchParams;
+   if(params.get('select')?.includes('play_classrooms!inner(title)')){
+    assert.equal(params.get('object_path'),'not.is.null');
+    assert.equal(params.get('order'),'class_id.asc,group_no.asc');
+    const rows=[...groups.filter(g=>g.object_path).map(g=>({...g,play_classrooms:{title:room.title}})),...otherSavedGroups];
+    const [,afterClassId,afterGroup]=/class_id\.gt\.([^,]+),and\(class_id\.eq\.[^,]+,group_no\.gt\.(\d+)\)\)/.exec(params.get('or')??'')??[];
+    return Response.json(rows.filter(row=>!afterClassId||row.class_id>afterClassId||row.class_id===afterClassId&&row.group_no>Number(afterGroup)).slice(0,Number(params.get('limit'))));
+   }
+   const n=Number(/group_no=eq.(\d+)/.exec(url)?.[1]);return Response.json(n?[groups[n-1]]:groups);
+  }
   if(url.includes('/rest/v1/play_class_uploads')){if(options.method==='DELETE')cleanup++;return Response.json([]);}
   if(url.includes('/object/upload/sign/'))return Response.json({url:'/object/upload/sign/opaque?token=short-lived'});
   if(url.includes('/object/sign/'))return Response.json({signedURL:'/object/sign/opaque?token=short-lived'});
@@ -28,7 +38,7 @@ try{
  };
  const req=(body,cookie='',origin='https://play.test')=>new Request('https://play.test/api/play-class',{method:'POST',headers:{origin,cookie,'Content-Type':'application/json'},body:JSON.stringify(body)});
  const call=(body,cookie)=>route.POST(req(body,cookie));
- for(const action of ['list','create','roster','toggle'])assert.equal((await call({action,classId:id,groups:2,title:'수업',open:false})).status,401);
+ for(const action of ['list','create','roster','toggle','saved-projects'])assert.equal((await call({action,classId:id,groups:2,title:'수업',open:false})).status,401);
  assert.equal((await route.POST(req({action:'lookup',code:'123456'},'','https://evil.test'))).status,403);
  assert.equal((await call({action:'lookup',code:'12ab56'})).status,404);
  assert.equal((await call({action:'teacher-login',pin:'wrong'})).status,401);
@@ -37,6 +47,9 @@ try{
  assert.equal((await call({action:'create',title:'반',groups:13},tc)).status,400);
  const join=await call({action:'join',code:'123456',group:1}),sc=join.headers.get('set-cookie').split(';')[0];assert.equal(join.status,200);assert(join.headers.get('set-cookie').includes('HttpOnly'));
  assert.equal((await call({action:'roster',classId:id},sc)).status,401);
+ assert.equal((await call({action:'saved-projects'},sc)).status,401);
+ assert.equal((await call({action:'saved-projects',afterClassId:id,afterGroup:13},tc)).status,400);
+ assert.deepEqual(await (await call({action:'saved-projects'},tc)).json(),{projects:[],next:null});
  assert.equal((await call({action:'work',classId:id,group:2},sc)).status,401);
  assert.equal((await call({action:'work',classId:id,group:1},sc+'tamper')).status,401);
  assert.equal((await call({action:'work',classId:id,group:1},sc)).status,200);
@@ -51,6 +64,20 @@ try{
  uploaded='not a drawing';assert.equal((await call({action:'save',classId:id,group:1,ticket:next.ticket},sc)).status,400);assert.equal(groups[0].revision,1);
  uploaded=JSON.stringify(emptyDrawingProject());race=true;assert.equal((await call({action:'save',classId:id,group:1,ticket:next.ticket},sc)).status,409);race=false;
  await call({action:'toggle',classId:id,open:false},tc);assert.equal((await call({action:'save',classId:id,group:1,ticket:next.ticket},sc)).status,423);assert.equal((await call({action:'work',classId:id,group:1},sc)).status,423);assert.equal((await call({action:'work',classId:id,group:1},tc)).status,200);
+ const archiveList=await (await call({action:'saved-projects'},tc)).json();
+ assert.equal(archiveList.projects.length,1,'saved works remain listed in a closed class');
+ assert.deepEqual(archiveList.projects[0],{classId:id,group:1,classTitle:room.title,title:emptyDrawingProject().title,scenes:1,updatedAt:null});
+ assert.equal(archiveList.next,null);
+ otherSavedGroups=Array.from({length:100},(_,i)=>({
+  class_id:`${id.slice(0,-3)}${String(i+2).padStart(3,'0')}`,group_no:1,
+  play_classrooms:{title:'다른 수업'},summary:{},updated_at:null,
+ }));
+ const firstPage=await (await call({action:'saved-projects'},tc)).json();
+ assert.equal(firstPage.projects.length,100);
+ const lastPage=await (await call({action:'saved-projects',...firstPage.next},tc)).json();
+ assert.equal(lastPage.projects.length,1);
+ assert.equal(lastPage.projects[0].classId,otherSavedGroups.at(-1).class_id);
+ assert.equal(lastPage.next,null);
  assert.equal(server.verify(server.token({kind:'group',classId:id,group:1,expires:Date.now()-1000}),'group'),null);
  assert.equal(server.verify(sign.ticket,'group'),null,'upload ticket never grants classroom access');
  console.log('PASS: numeric class creation, teacher-only roster and collection, scoped group sessions, CSRF, invalid/expired tokens, size/format validation, idempotent saves, stale-pad conflicts, concurrent commit failure and closed-class protection. No external requests.');

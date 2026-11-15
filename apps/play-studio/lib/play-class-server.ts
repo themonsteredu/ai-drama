@@ -2,6 +2,7 @@ import {randomInt,randomUUID,timingSafeEqual} from 'node:crypto';
 import {authenticated,checkPin,sessionCookie,SettingsError,playDb as db,signPlayValue as sign,reply} from './play-ai-server';
 import {parseDrawingFile} from './drawing-project';
 import {movieSeconds} from './drawing-movie';
+import type {ClassGroup, SavedClassPage} from './play-class-client';
 const COOKIE='moakit-play-group',BUCKET='play-class-work',LIMIT=50_000_000;
 const uuid=(v:unknown):v is string=>typeof v==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
 const groupNo=(v:unknown):v is number=>Number.isInteger(v)&&Number(v)>=1&&Number(v)<=12;
@@ -20,6 +21,35 @@ function scope(request:Request,body:Record<string,unknown>,allowTeacher=false){
 }
 async function room(id:string){const r=await db(`play_classrooms?id=eq.${id}&select=*`);if(!r[0])throw new SettingsError('수업을 찾지 못했어요.',404);return r[0];}
 async function group(classId:string,n:number){const r=await db(`play_class_groups?class_id=eq.${classId}&group_no=eq.${n}&select=*`);if(!r[0])throw new SettingsError('모둠을 다시 골라 주세요.',404);return r[0];}
+
+type SavedGroupRow = Pick<ClassGroup, 'group_no' | 'summary' | 'updated_at'> & {
+ class_id: string;
+ play_classrooms: {title: string};
+};
+
+async function savedProjects(afterClassId: unknown, afterGroup: unknown): Promise<SavedClassPage> {
+ let cursor = '';
+ if (afterClassId !== undefined || afterGroup !== undefined) {
+  if (!uuid(afterClassId) || !groupNo(afterGroup)) throw new SettingsError('작품 목록을 다시 열어 주세요.');
+  cursor = `&or=(class_id.gt.${afterClassId},and(class_id.eq.${afterClassId},group_no.gt.${afterGroup}))`;
+ }
+ const pageSize = 100;
+ const rows: SavedGroupRow[] = await db(
+  `play_class_groups?select=class_id,group_no,summary,updated_at,play_classrooms!inner(title)` +
+  `&object_path=not.is.null&order=class_id.asc,group_no.asc&limit=${pageSize + 1}${cursor}`,
+ );
+ const projects = rows.slice(0, pageSize).map(row => ({
+  classId: row.class_id,
+  group: row.group_no,
+  classTitle: row.play_classrooms.title,
+  title: row.summary?.title || `${row.group_no}모둠 이야기`,
+  scenes: row.summary?.scenes ?? null,
+  updatedAt: row.updated_at ?? null,
+ }));
+ const last = projects.at(-1);
+ return {projects, next: last && rows.length > pageSize ? {afterClassId: last.classId, afterGroup: last.group} : null};
+}
+
 async function storage(path:string,init:RequestInit={}){
  const key=process.env.SUPABASE_SERVICE_ROLE_KEY!,base=process.env.NEXT_PUBLIC_SUPABASE_URL;
  const r=await fetch(`${base}/storage/v1/${path}`,{...init,headers:{apikey:key,Authorization:`Bearer ${key}`,'Content-Type':'application/json',...init.headers},cache:'no-store',redirect:'error',signal:AbortSignal.timeout(60000)});
@@ -52,6 +82,10 @@ export async function classAction(request:Request,b:Record<string,unknown>):Prom
   return reply({room:r,group:b.group},200,{'Set-Cookie':cookie(token({kind:'group',classId:r.id,group:b.group,expires:Date.now()+28800000}))});
  }
  if(action==='list'){teacher(request);return reply({rooms:await db('play_classrooms?select=*&order=created_at.desc&limit=100')});}
+ if (action === 'saved-projects') {
+  teacher(request);
+  return reply(await savedProjects(b.afterClassId, b.afterGroup));
+ }
  if(action==='create'){
   teacher(request);const title=typeof b.title==='string'?b.title.trim():'';if(!title||title.length>80||!groupNo(b.groups))throw new SettingsError('수업 이름과 모둠 수를 확인해 주세요.');
   for(let i=0;i<5;i++){const rows=await db('rpc/play_create_class',{method:'POST',body:JSON.stringify({p_code:String(randomInt(100000,1000000)),p_title:title,p_groups:b.groups})});if(rows[0])return reply({room:rows[0]});}
