@@ -57,7 +57,7 @@ export function GroupProjectDialog({project,onApply,onClose,onVideos,initialWork
   <button className="group-movie-save" disabled={busy||!works.length||works.some(w=>!w.name.trim())} onClick={()=>void merge()}>
    {busy?'장면을 준비하고 있어요…':videoOnly?'합친 영상 준비하기':'장면을 한 작품으로 모으기'}
   </button>
-  {videoOnly?<p className="group-movie-note">다음 화면에서 ‘영상 저장하기’를 누르면 한 파일로 받아요.</p>:<p className="group-movie-note">편집창에서 합친 작품을 열고 장면을 고칠 수 있어요.</p>}
+  {videoOnly?<p className="group-movie-note">다음 화면에서 합친 영상을 미리 보고 한 파일로 저장해요.</p>:<p className="group-movie-note">편집창에서 합친 작품을 열고 장면을 고칠 수 있어요.</p>}
   {status?<p role="status">{status}</p>:null}{error?<p className="group-movie-error" role="alert">{error}</p>:null}
   {onVideos&&<details><summary>이미 영상 파일로 저장했나요?</summary><button disabled={busy} onClick={onVideos}>완성된 영상 파일 합치기</button></details>}
  </dialog>;

@@ -13,6 +13,7 @@
 .scene-submit h2, .scene-submit p { margin: 0; }
 .scene-submit form { display: grid; gap: 10px; }
 .scene-submit .scene-submit-project { color: #496472; margin: 6px 0 18px; overflow-wrap: anywhere; }
+.scene-submit .scene-submit-destination { border-radius: 9px; padding: 9px 12px; background: #eef6f4; color: #125e54; font-weight: 700; }
 .scene-submit button, .scene-submit input, .scene-submit select {
   min-height: 44px;
   border: 1px solid #c9d9e1;

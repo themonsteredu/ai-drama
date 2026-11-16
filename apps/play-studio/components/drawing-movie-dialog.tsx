@@ -3,7 +3,8 @@ import {useEffect,useRef,useState} from 'react';
 import type {DrawingProject,DrawingTransition} from '@/lib/drawing-project';
 import {transitionChoices} from '@/lib/drawing-transition';
 import {loadDrawingImages} from '@/lib/drawing-media';
-import {clockLabel,movieSeconds,movieSupported,recordMovie,movieTimeline} from '@/lib/drawing-movie';
+import {clockLabel,movieSeconds,movieSupported,previewMovie,recordMovie,movieTimeline} from '@/lib/drawing-movie';
+import {DRAW_WIDTH,DRAW_HEIGHT} from '@/lib/drawing-renderer';
 import {activeNarration} from '@/lib/film-narration';
 import {downloadBlob,fileName} from '@/lib/project-files';
 import './drawing-movie.css';
@@ -20,21 +21,55 @@ type Props={
 
 export function DrawingMovieDialog({project,downloadName,onTransition,onDeleteScene,onMoveScene,onPlayStory,onClose}:Props){
  const dialog=useRef<HTMLDialogElement>(null),canceled=useRef(false),alive=useRef(true);
+ const previewCanvas=useRef<HTMLCanvasElement>(null),activePreview=useRef<AbortController|null>(null);
  // Browser support is read on the client only; the server has no MediaRecorder to ask.
  const [usable,setUsable]=useState<boolean|null>(null);
  const [busy,setBusy]=useState(false),[ratio,setRatio]=useState(0),[label,setLabel]=useState('');
  const [error,setError]=useState(''),[done,setDone]=useState('');
+ const [showPreview,setShowPreview]=useState(false),[previewing,setPreviewing]=useState(false);
+ const [previewRatio,setPreviewRatio]=useState(0),[previewLabel,setPreviewLabel]=useState('');
  useEffect(()=>{
   alive.current=true;setUsable(movieSupported());
   const previous=document.activeElement as HTMLElement|null;
   dialog.current?.showModal();
-  return()=>{alive.current=false;canceled.current=true;previous?.focus();};
+  return()=>{alive.current=false;canceled.current=true;activePreview.current?.abort();previous?.focus();};
  },[]);
  const total=movieSeconds(project),narration=activeNarration(project);
  const withVoice=project.scenes.filter(s=>s.voice).length;
  function close(){if(busy)return;onClose();}
+ function stopPreview(){
+  activePreview.current?.abort();
+  activePreview.current=null;
+  setPreviewing(false);
+  setPreviewLabel('미리보기를 멈췄어요.');
+ }
+ async function watchPreview(){
+  if(busy||activePreview.current||!previewCanvas.current)return;
+  const controller=new AbortController();
+  activePreview.current=controller;
+  setShowPreview(true);setPreviewing(true);setPreviewRatio(0);setPreviewLabel('그림과 소리를 준비하고 있어요…');
+  setError('');setDone('');
+  let lastRatio=-1,lastLabel='';
+  try{
+   await previewMovie(project,previewCanvas.current,(value,text)=>{
+    if(controller.signal.aborted||!alive.current)return;
+    if(text!==lastLabel||value-lastRatio>=.01){
+     lastRatio=value;lastLabel=text;setPreviewRatio(value);setPreviewLabel(text);
+    }
+   },controller.signal);
+   if(alive.current&&!controller.signal.aborted){setPreviewRatio(1);setPreviewLabel('미리보기가 끝났어요.');}
+  }catch(cause){
+   if(alive.current&&!controller.signal.aborted){
+    setShowPreview(false);
+    setError(cause instanceof Error?cause.message:'영상 미리보기를 시작하지 못했어요. 다시 눌러 주세요.');
+   }
+  }finally{
+   if(activePreview.current===controller){activePreview.current=null;if(alive.current)setPreviewing(false);}
+  }
+ }
  async function make(){
   if(busy)return;
+  if(activePreview.current)stopPreview();
   canceled.current=false;setBusy(true);setError('');setDone('');setRatio(0);setLabel('그림을 준비하고 있어요…');
   try{
    const images=await loadDrawingImages(project.assets);
@@ -52,6 +87,17 @@ export function DrawingMovieDialog({project,downloadName,onTransition,onDeleteSc
  return <dialog ref={dialog} className="movie-dialog" aria-labelledby="movie-title" onCancel={event=>{if(busy)event.preventDefault();else onClose();}} onClick={event=>{if(event.target===event.currentTarget)close();}}>
   <div className="movie-content">
    <header><div><h2 id="movie-title">영상 만들기</h2><p>{downloadName??(project.scenes.length>1?'그림과 그림 사이를 어떻게 이어 볼까요?':'이 장면을 영상으로 만들어요.')}</p></div><button type="button" aria-label="영상 창 닫기" disabled={busy} onClick={close}>×</button></header>
+
+   {!onPlayStory&&<section className="movie-preview-panel" aria-label="영상 미리보기">
+    <button type="button" className="movie-watch" disabled={busy} onClick={previewing?stopPreview:()=>void watchPreview()}>
+     {previewing?'미리보기 그만 보기':'영상 미리보기'}
+    </button>
+    <div className="movie-preview" hidden={!showPreview}>
+     <canvas ref={previewCanvas} width={DRAW_WIDTH} height={DRAW_HEIGHT} aria-label="영상 미리보기 화면"/>
+     <progress max={1} value={previewRatio} aria-label="미리보기 재생 진행"/>
+     <p role="status">{previewLabel}</p>
+    </div>
+   </section>}
 
    <ul className="movie-scenes" aria-label="장면 차례">
     {movieTimeline(project).map(({scene,seconds},index)=>{

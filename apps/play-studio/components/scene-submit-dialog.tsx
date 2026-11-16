@@ -23,7 +23,7 @@ export function SceneNumberPicker({label, value, disabled, onPick}: {
 export function SceneSubmitDialog({project, selected, onSubmitted, onClose}: {
   project: DrawingProject;
   selected?: SelectedScene;
-  onSubmitted?: () => void;
+  onSubmitted?: (scene: ClassSceneNumber) => void;
   onClose: () => void;
 }) {
   const [code, setCode] = useState('');
@@ -68,7 +68,7 @@ export function SceneSubmitDialog({project, selected, onSubmitted, onClose}: {
     if (!room || !group || !scene) return;
     await submitSceneProject(project, selected ? {classId: room.id, group} : {code: room.code, group}, scene);
     setSubmitted(true);
-    onSubmitted?.();
+    onSubmitted?.(scene);
   }
 
   return <dialog ref={dialog} className="scene-submit" aria-labelledby="scene-submit-title" onCancel={event => {
@@ -85,15 +85,15 @@ export function SceneSubmitDialog({project, selected, onSubmitted, onClose}: {
         <button className="scene-primary" disabled={busy || code.length !== 6}>{busy ? '확인 중…' : '수업 확인'}</button>
       </form> :
       <form onSubmit={event => {event.preventDefault(); void run(submit);}}>
-        <p><strong>{room.title}</strong>{selected ? ` · ${group}모둠 · 장면${scene}` : ''}</p>
+        <p className="scene-submit-destination" aria-live="polite">{room.title}{group > 0 ? ` · ${group}모둠` : ''}{scene ? ` · 장면${scene}` : ''}</p>
         {!selected && <>
           <label htmlFor="scene-submit-group">우리 모둠</label>
           <select id="scene-submit-group" disabled={busy} value={group} onChange={event => setGroup(Number(event.target.value))}>
             <option value={0}>모둠을 골라 주세요</option>
             {Array.from({length: room.group_count}, (_, index) => index + 1).map(number => <option key={number} value={number}>{number}모둠</option>)}
           </select>
-          <SceneNumberPicker label="제출할 장면 번호" value={scene} disabled={busy} onPick={setScene}/>
         </>}
+        <SceneNumberPicker label="제출할 장면 번호" value={scene} disabled={busy} onPick={setScene}/>
         <button className="scene-primary" disabled={busy || !group || !scene}>{busy ? '작품을 보내고 있어요…' : '선생님께 보내기'}</button>
         {!selected && <button type="button" disabled={busy} onClick={() => {setRoom(null); setError('');}}>수업코드 다시 입력</button>}
       </form>}

@@ -328,8 +328,8 @@ export function Classroom({teacherMode = false, downloadMode = false}: {teacherM
               <span>{group.summary.scenes ? group.summary.scenes + '장면 · ' + clockLabel(group.summary.seconds || 0) : '공동 작품을 기다리고 있어요.'}</span>
               <small>{group.summary.title}</small></div>
             <div className="class-download-actions">
-              <button disabled={busy || !group.revision} aria-label={group.group_no + '모둠 공동 작품 영상 다운로드'}
-                onClick={() => void run(() => openGroup(group.group_no, true))}>영상 다운로드</button>
+              <button disabled={busy || !group.revision} aria-label={group.group_no + '모둠 공동 작품 영상 미리보기·다운로드'}
+                onClick={() => void run(() => openGroup(group.group_no, true))}>영상 미리보기·다운로드</button>
               <button disabled={busy || !group.revision} onClick={() => void run(() => openGroup(group.group_no, false))}>편집으로 열기</button>
             </div>
           </article>)}</div>

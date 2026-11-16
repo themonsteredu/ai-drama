@@ -18,9 +18,9 @@ function SceneWorkBar({work, storageKey, editor, onBack}: {
 }) {
   const [submit, setSubmit] = useState(false);
   const [leaving, setLeaving] = useState(false);
-  const [submittedAt, setSubmittedAt] = useState('');
+  const [submission, setSubmission] = useState<{version: string; scene: ClassSceneNumber} | null>(null);
   const disabled = !editor.loaded || editor.busy || editor.recording || leaving;
-  const submitted = submittedAt === editor.project.updatedAt;
+  const sentScene = submission?.version === editor.project.updatedAt ? submission.scene : null;
 
   async function back() {
     setLeaving(true);
@@ -34,13 +34,13 @@ function SceneWorkBar({work, storageKey, editor, onBack}: {
   }
 
   return <section className="class-work-bar" aria-label="내 장면 제출">
-    <div><strong>{work.room.title} · {work.group}모둠 · 장면{work.scene}</strong><small role="status">{submitted ? '선생님께 보냈어요.' : '완성한 장면을 선생님께 보내요.'}</small></div>
+    <div><strong>{work.room.title} · {work.group}모둠 · 장면{work.scene}</strong><small role="status">{sentScene ? `장면${sentScene}로 선생님께 보냈어요.` : '완성한 장면을 선생님께 보내요.'}</small></div>
     <div className="class-work-actions">
-      <button className="class-primary" disabled={disabled || submitted} onClick={() => {editor.stop(); setSubmit(true);}}>선생님께 보내기</button>
+      <button className="class-primary" disabled={disabled} onClick={() => {editor.stop(); setSubmit(true);}}>{sentScene ? '다시 보내기' : '선생님께 보내기'}</button>
       <button disabled={disabled} onClick={() => void back()}>장면 선택</button>
     </div>
-    {submit && <SceneSubmitDialog project={editor.project} selected={work} onClose={() => setSubmit(false)}
-      onSubmitted={() => setSubmittedAt(editor.project.updatedAt)}/>}
+    {submit && <SceneSubmitDialog project={editor.project} selected={{...work, scene: sentScene ?? work.scene}} onClose={() => setSubmit(false)}
+      onSubmitted={scene => setSubmission({version: editor.project.updatedAt, scene})}/>}
   </section>;
 }
 

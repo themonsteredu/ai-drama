@@ -3,6 +3,7 @@ import {drawDrawingScene,DRAW_WIDTH,DRAW_HEIGHT,type RasterCache} from './drawin
 import {effectiveMusic,musicPlaybackKey,synthMusic} from './drawing-music';
 import {activeNarration,narrationDurations} from './film-narration';
 import {createTransitionPainter,incomingTransition} from './drawing-transition';
+import {loadDrawingImages} from './drawing-media';
 
 /** Automatic scenes start with their recording and cut when that recording ends. */
 export const SCENE_PAD=0,SCENE_MIN=2.5,SCENE_SILENT=4,VOICE_LEAD=0;
@@ -63,6 +64,110 @@ function schedule(context:AudioContext,destination:AudioNode,buffer:AudioBuffer,
  return source;
 }
 
+type MovieStep=ReturnType<typeof movieTimeline>[number];
+type MovieTrack={buffer:AudioBuffer;at:number;seconds:number;volume:number;loop:boolean};
+
+async function movieTracks(project:DrawingProject,plan:MovieStep[],context:AudioContext){
+ const tracks:MovieTrack[]=[],cache=new Map<string,AudioBuffer|null>();
+ async function audio(url:string){
+  if(!cache.has(url))cache.set(url,await decodeQuietly(context,url));
+  return cache.get(url);
+ }
+ const narration=activeNarration(project);
+ if(narration){
+  const buffer=await audio(narration.source);
+  if(!buffer)throw new Error('전체 녹음을 읽지 못했어요. 녹음을 다시 올려 주세요.');
+  const last=plan[plan.length-1];
+  tracks.push({buffer,at:0,seconds:last.at+last.seconds,volume:1,loop:false});
+ }
+ let previousMusic:{track:MovieTrack;key:string;settings:string}|null=null;
+ for(const {scene,at,seconds} of plan){
+  const music=musicSource(project,scene);
+  if(music){
+   const buffer=await audio(music.url);
+   if(!buffer)throw new Error('배경음악을 읽지 못했어요. 음악을 다시 선택해 주세요.');
+   const key=musicPlaybackKey(scene),settings=JSON.stringify(music);
+   // Keep a soundtrack continuous across adjacent scenes with the same settings.
+   if(previousMusic&&previousMusic.key===key&&previousMusic.settings===settings){
+    previousMusic.track.seconds+=seconds;
+   }else{
+    const track={buffer,at,seconds,volume:music.volume,loop:music.loop};
+    previousMusic={track,key,settings};
+    tracks.push(track);
+   }
+  }else{
+   previousMusic=null;
+  }
+  if(scene.voice&&!narration){
+   const buffer=await audio(scene.voice.source);
+   if(!buffer)throw new Error(`${scene.title}의 대사 파일을 읽지 못했어요. 녹음 파일을 다시 넣어 주세요.`);
+   tracks.push({buffer,at:at+VOICE_LEAD,seconds,volume:1,loop:false});
+  }
+ }
+ return tracks;
+}
+
+function scheduleTracks(context:AudioContext,destination:AudioNode,tracks:MovieTrack[],base:number,sources:AudioBufferSourceNode[]){
+ for(const {buffer,at,seconds,volume,loop} of tracks){
+  sources.push(schedule(context,destination,buffer,base+at,seconds,volume,loop));
+ }
+}
+
+function movieFrames(project:DrawingProject,plan:MovieStep[],ctx:CanvasRenderingContext2D,images:RasterCache){
+ const paintTransition=createTransitionPainter();
+ return (elapsed:number)=>{
+  const index=plan.findIndex(step=>elapsed<step.at+step.seconds);
+  if(index<0)return null;
+  const step=plan[index],localSeconds=Math.max(0,elapsed-step.at);
+  if(!paintTransition(ctx,project,step.scene,images,localSeconds,incomingTransition(plan,index))){
+   drawDrawingScene(ctx,project,step.scene,images,localSeconds);
+  }
+  return {index,remaining:step.at+step.seconds-elapsed};
+ };
+}
+
+/** Play the export timeline onto a visible canvas without encoding a file. */
+export async function previewMovie(project:DrawingProject,canvas:HTMLCanvasElement,onProgress:MovieProgress,signal:AbortSignal){
+ const ctx=canvas.getContext('2d');
+ if(!ctx||typeof AudioContext==='undefined')throw new Error('이 기기에서 영상 미리보기를 열지 못했어요.');
+ const context=new AudioContext(),plan=movieTimeline(project),total=movieSeconds(project);
+ let frame=0;
+ const stopAudio=()=>{void context.close().catch(()=>{});};
+ signal.addEventListener('abort',stopAudio,{once:true});
+ try{
+  // Resume before awaiting the image or audio decoding to retain the tap's user activation.
+  await context.resume();
+  const [images,tracks]=await Promise.all([loadDrawingImages(project.assets),movieTracks(project,plan,context)]);
+  if(signal.aborted)return;
+  const paint=movieFrames(project,plan,ctx,images);
+  paint(0);
+  const base=context.currentTime;
+  scheduleTracks(context,context.destination,tracks,base,[]);
+  await new Promise<void>((resolve,reject)=>{
+   const stop=()=>{cancelAnimationFrame(frame);resolve();};
+   signal.addEventListener('abort',stop,{once:true});
+   const tick=()=>{
+    try{
+     const elapsed=Math.max(0,context.currentTime-base),step=paint(elapsed);
+     if(step){
+      onProgress(elapsed/total,`장면 ${step.index+1} / ${plan.length}`);
+      frame=requestAnimationFrame(tick);
+     }else finish();
+    }catch(error){finish(error);}
+   };
+   const finish=(error?:unknown)=>{
+    signal.removeEventListener('abort',stop);
+    if(error)reject(error);else resolve();
+   };
+   tick();
+  });
+ }finally{
+  cancelAnimationFrame(frame);
+  signal.removeEventListener('abort',stopAudio);
+  stopAudio();
+ }
+}
+
 /** Reads an EBML variable-length integer and says how many bytes it used. */
 function varint(bytes:Uint8Array,at:number){
  const first=bytes[at];if(first===undefined||first===0)return null;
@@ -111,7 +216,7 @@ export type MovieResult={blob:Blob;extension:string;seconds:number;lostVoices:nu
 export async function recordMovie(project:DrawingProject,images:RasterCache,onProgress:MovieProgress,canceled:()=>boolean):Promise<MovieResult>{
  const mimeType=movieMimeType();
  if(!movieSupported()||!mimeType)throw new Error('이 기기에서는 영상 파일을 만들 수 없어요. 아래 「화면 녹화로 만들기」를 눌러 주세요.');
- const total=movieSeconds(project);
+ const total=movieSeconds(project),plan=movieTimeline(project);
  const canvas=document.createElement('canvas');canvas.width=DRAW_WIDTH;canvas.height=DRAW_HEIGHT;
  const ctx=canvas.getContext('2d');
  if(!ctx)throw new Error('영상을 만들 도구를 열지 못했어요.');
@@ -125,27 +230,7 @@ export async function recordMovie(project:DrawingProject,images:RasterCache,onPr
   await context.resume().catch(()=>{});
   onProgress(0,'소리를 준비하고 있어요…');
   // Decode every track once up front: a stall mid-capture would be recorded as silence.
-  const cache=new Map<string,AudioBuffer|null>();
-  let lostVoices=0;
-  const plan:{scene:DrawingScene;at:number;seconds:number;music:ReturnType<typeof musicSource>;voice:AudioBuffer|null}[]=[];
-  let at=0;
-  const narration=activeNarration(project);
-  const fullVoice=narration?await decodeQuietly(context,narration.source):null;
-  if(narration&&!fullVoice)throw new Error('전체 녹음을 읽지 못했어요. 녹음을 다시 올려 주세요.');
-  for(const step of movieTimeline(project)){
-   const {scene,seconds}=step;
-   const music=musicSource(project,scene);
-   if(music&&!cache.has(music.url))cache.set(music.url,await decodeQuietly(context,music.url));
-   if(music&&!cache.get(music.url))throw new Error('배경음악을 읽지 못했어요. 음악을 다시 선택해 주세요.');
-   let voice:AudioBuffer|null=null;
-   if(scene.voice&&!narration){
-    if(!cache.has(scene.voice.source))cache.set(scene.voice.source,await decodeQuietly(context,scene.voice.source));
-    voice=cache.get(scene.voice.source)??null;
-    if(!voice)throw new Error(`${scene.title}의 대사 파일을 읽지 못했어요. 대사가 빠진 영상은 저장하지 않았어요. 녹음 파일을 다시 넣어 주세요.`);
-   }
-   plan.push({scene,at,seconds,music,voice});
-   at+=seconds;
-  }
+  const audio=await movieTracks(project,plan,context);
   if(canceled())throw new Error('영상 만들기를 그만두었어요.');
 
   const destination=context.createMediaStreamDestination();
@@ -168,52 +253,31 @@ export async function recordMovie(project:DrawingProject,images:RasterCache,onPr
   });
 
   // The first frame must exist before capture starts, or the file opens on a blank screen.
-  drawDrawingScene(ctx,project,plan[0].scene,images,0);
+  const paint=movieFrames(project,plan,ctx,images);
+  paint(0);
   // One blob, no timeslice: asking for chunks makes Chrome drop the header's Duration
   // field altogether, and the saved movie then reports no length at all.
   recorder.start();
   videoTrack?.requestFrame?.();
   const base=context.currentTime;
-  // Adjacent scenes with the same soundtrack share one source, so music never restarts at each cut.
-  const musicRuns:{key:string;music:NonNullable<ReturnType<typeof musicSource>>;at:number;seconds:number}[]=[];
-  for(const step of plan){
-   if(!step.music)continue;
-   const last=musicRuns[musicRuns.length-1];
-   const key=musicPlaybackKey(step.scene);
-   if(last&&last.key===key&&Math.abs(last.at+last.seconds-step.at)<.001&&JSON.stringify(last.music)===JSON.stringify(step.music))last.seconds+=step.seconds;
-   else musicRuns.push({key,music:step.music,at:step.at,seconds:step.seconds});
-  }
-  for(const run of musicRuns){
-   const buffer=cache.get(run.music.url);
-   if(buffer){sources.push(schedule(context,destination,buffer,base+run.at,run.seconds,run.music.volume,run.music.loop));sources.push(schedule(context,monitor,buffer,base+run.at,run.seconds,run.music.volume,run.music.loop));}
-  }
-  if(fullVoice){sources.push(schedule(context,destination,fullVoice,base,total,1,false));sources.push(schedule(context,monitor,fullVoice,base,total,1,false));}
-  for(const step of plan){
-   if(step.voice){
-    sources.push(schedule(context,destination,step.voice,base+step.at+VOICE_LEAD,step.seconds,1,false));
-    sources.push(schedule(context,monitor,step.voice,base+step.at+VOICE_LEAD,step.seconds,1,false));
-   }
-  }
+  scheduleTracks(context,destination,audio,base,sources);
+  scheduleTracks(context,monitor,audio,base,sources);
 
   await new Promise<void>((resolve,reject)=>{
-   const paintTransition=createTransitionPainter();
-   let timer=0;
-   const paint=()=>{
-    if(canceled()){clearTimeout(timer);reject(new Error('영상 만들기를 그만두었어요.'));return;}
+   const tick=()=>{
+    if(canceled()){reject(new Error('영상 만들기를 그만두었어요.'));return;}
     // Use the same clock that schedules the dialogue; rendering delays must not advance the cut early.
-    const elapsed=context.currentTime-base;
-    if(elapsed>=total){resolve();return;}
-    const index=Math.max(0,plan.findIndex(step=>elapsed<step.at+step.seconds));
-    const step=plan[index<0?plan.length-1:index];
-    const localSeconds=Math.max(0,elapsed-step.at);
-    if(!paintTransition(ctx,project,step.scene,images,localSeconds,incomingTransition(plan,index)))drawDrawingScene(ctx,project,step.scene,images,localSeconds);
-    videoTrack?.requestFrame?.();
-    onProgress(Math.min(.99,Math.max(0,elapsed)/total),`${index+1} / ${plan.length} 장면을 담는 중…`);
-    // Off-screen canvas animation frames may be throttled to 1 fps. Capture on an
-    // audio-clock timer instead, waking at the next cut/end even between frames.
-    timer=window.setTimeout(paint,Math.max(1,Math.min(1000/30,(step.at+step.seconds-elapsed)*1000)));
+    const elapsed=Math.max(0,context.currentTime-base);
+    try{
+     const step=paint(elapsed);
+     if(!step){resolve();return;}
+     videoTrack?.requestFrame?.();
+     onProgress(Math.min(.99,elapsed/total),`${step.index+1} / ${plan.length} 장면을 담는 중…`);
+     // An off-screen canvas can be throttled. Wake on the audio clock at the next frame or cut.
+     window.setTimeout(tick,Math.max(1,Math.min(1000/30,step.remaining*1000)));
+    }catch(error){reject(error);}
    };
-   paint();
+   tick();
   });
 
   onProgress(.99,'영상을 마무리하는 중…');
@@ -222,7 +286,7 @@ export async function recordMovie(project:DrawingProject,images:RasterCache,onPr
   const raw=new Blob(chunks,{type:recorder.mimeType||mimeType});
   if(raw.size<1024)throw new Error('영상에 장면이 담기지 않았어요. 다시 저장하거나 「화면 녹화로 만들기」를 써 주세요.');
   const blob=await stampWebmDuration(raw,total).catch(()=>raw);
-  return {blob,extension:movieExtension(recorder.mimeType||mimeType),seconds:total,lostVoices};
+  return {blob,extension:movieExtension(recorder.mimeType||mimeType),seconds:total,lostVoices:0};
  }finally{
   if(recorder&&recorder.state!=='inactive'){try{recorder.stop();}catch{}}
   cleanup();

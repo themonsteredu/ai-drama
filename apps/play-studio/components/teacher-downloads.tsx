@@ -189,10 +189,10 @@ export function TeacherDownloads({onSessionExpired, onLock, locking}: {
               downloadBlob(blob, `${projectName(project)}.json`);
               setStatus('그림과 녹음이 포함된 작품 파일을 저장했어요.');
             })}>작품 파일 받기</button>
-            <button className="class-primary" disabled={disabled} aria-label={`${project.title} 영상 다운로드`} onClick={() => void run(async () => {
+            <button className="class-primary" disabled={disabled} aria-label={`${project.title} 영상 미리보기·다운로드`} onClick={() => void run(async () => {
               const value = project.source === 'device' ? await deviceProject(project) : await readClassProject(await serverProjectUrl(project));
               if (alive.current) setMovie({project: value, name: projectName(project)});
-            })}>영상 다운로드</button>
+            })}>영상 미리보기·다운로드</button>
           </div>
         </li>;
       })}

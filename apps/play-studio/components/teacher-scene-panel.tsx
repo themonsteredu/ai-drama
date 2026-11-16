@@ -127,7 +127,7 @@ export function TeacherScenePanel({room, onSessionExpired}: {room: Classroom; on
             {index === 0 ? '최근 제출 · ' : ''}{work.title} · {submittedDate.format(new Date(work.updatedAt))}
           </option>)}
         </select> : <><strong>{current.title}</strong><small>{submittedDate.format(new Date(current.updatedAt))} 제출</small></>}</div>
-      {current && <button disabled={busy} aria-label={`장면${scene} 영상 다운로드`} onClick={() => void run(() => openMovie(current))}>영상 다운로드</button>}
+      {current && <button disabled={busy} aria-label={`장면${scene} 영상 미리보기·다운로드`} onClick={() => void run(() => openMovie(current))}>영상 미리보기·다운로드</button>}
     </li>)}</ul>}
     <button className="class-primary" disabled={busy || selected.length < 2} onClick={() => void run(openMerge)}>
       {selected.length ? `선택한 장면 ${selected.length}개 영상 합치기` : '장면 영상 합치기'}
