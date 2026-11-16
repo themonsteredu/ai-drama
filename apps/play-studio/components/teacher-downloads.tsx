@@ -2,26 +2,33 @@
 
 import {useEffect, useRef, useState} from 'react';
 import {
-  ClassError, classApi, fetchClassProject, readClassProject,
+  ClassError, classApi, classProjectUrl, fetchClassProject, listSceneProjects, readClassProject, sceneProjectUrl,
   type SavedClassPage, type SavedClassProject,
 } from '@/lib/play-class-client';
+import type {SavedSceneProject} from '@/lib/play-class-scenes';
 import {listSavedDrawings, loadDrawing, type SavedDeviceProject} from '@/lib/drawing-storage';
 import type {DrawingProject} from '@/lib/drawing-project';
 import {downloadBlob, fileName} from '@/lib/project-files';
 import {DrawingMovieDialog} from './drawing-movie-dialog';
 import './teacher-downloads.css';
 
-type SavedProject = ({source: 'server'} & SavedClassProject) | ({source: 'device'} & SavedDeviceProject);
+type ServerProject = ({source: 'server'} & SavedClassProject) | ({source: 'scene'} & SavedSceneProject);
+type SavedProject = ServerProject | ({source: 'device'} & SavedDeviceProject);
 
-async function listServerProjects(): Promise<SavedProject[]> {
-  const projects: SavedProject[] = [];
+async function listGroupProjects(): Promise<ServerProject[]> {
+  const projects: ServerProject[] = [];
   let next: SavedClassPage['next'] = null;
   do {
     const page: SavedClassPage = await classApi({action: 'saved-projects', ...next});
     projects.push(...page.projects.map(project => ({...project, source: 'server'} as const)));
     next = page.next;
   } while (next);
-  return projects.sort(byDate);
+  return projects;
+}
+
+async function listServerProjects(): Promise<ServerProject[]> {
+  const [groups, scenes] = await Promise.all([listGroupProjects(), listSceneProjects()]);
+  return [...groups, ...scenes.map(project => ({...project, source: 'scene'} as const))].sort(byDate);
 }
 
 function byDate(a: SavedProject, b: SavedProject) {
@@ -29,10 +36,14 @@ function byDate(a: SavedProject, b: SavedProject) {
 }
 
 function sourceLabel(project: SavedProject) {
+  if (project.source === 'scene') return `${project.classTitle} · ${project.group}모둠 · 장면${project.scene}`;
   if (project.source === 'server') return `${project.classTitle} · ${project.group}모둠`;
   if (project.key === 'active') return '그림 편집기';
   if (project.key === 'four-scene-film') return '4장면 작업';
   if (project.key === 'teacher-assembly') return '교사 편집 작품';
+  if (project.key === 'teacher-preview') return '교사 모둠 편집본';
+  const scene = /^class:[^:]+:(\d+):scene:(\d+)$/.exec(project.key);
+  if (scene) return `${scene[1]}모둠 장면${scene[2]} 작업`;
   const group = /^class:[^:]+:(\d+)$/.exec(project.key)?.[1];
   return group ? `${group}모둠 작업` : '기기 자동 저장';
 }
@@ -46,10 +57,8 @@ function formattedDate(value: string | null) {
   return Number.isNaN(date.getTime()) ? null : date.toLocaleString('ko-KR', {dateStyle: 'medium', timeStyle: 'short'});
 }
 
-async function serverProjectUrl(project: SavedClassProject) {
-  const {url} = await classApi<{url: string | null}>({action: 'work', classId: project.classId, group: project.group});
-  if (!url) throw new Error('수업 작품을 찾지 못했어요. 목록을 다시 확인해 주세요.');
-  return url;
+function serverProjectUrl(project: ServerProject) {
+  return project.source === 'scene' ? sceneProjectUrl(project.id) : classProjectUrl(project.classId, project.group);
 }
 
 async function deviceProject(project: SavedDeviceProject) {
@@ -59,7 +68,7 @@ async function deviceProject(project: SavedDeviceProject) {
 }
 
 async function projectFile(project: SavedProject) {
-  if (project.source === 'server') return (await fetchClassProject(await serverProjectUrl(project))).blob();
+  if (project.source !== 'device') return (await fetchClassProject(await serverProjectUrl(project))).blob();
   return new Blob([JSON.stringify(await deviceProject(project))], {type: 'application/json'});
 }
 
@@ -170,7 +179,7 @@ export function TeacherDownloads({onSessionExpired, onLock, locking}: {
     return <ul className="class-download-list">
       {entries.map(project => {
         const detail = [sourceLabel(project), project.scenes && `${project.scenes}장면`, formattedDate(project.updatedAt)].filter(Boolean).join(' · ');
-        const key = project.source === 'device' ? project.key : `${project.classId}:${project.group}`;
+        const key = project.source === 'device' ? project.key : project.source === 'scene' ? project.id : `${project.classId}:${project.group}`;
         return <li key={key}>
           <div><strong>{project.title}</strong><small>{detail}</small></div>
           <div className="class-download-actions">
@@ -180,10 +189,10 @@ export function TeacherDownloads({onSessionExpired, onLock, locking}: {
               downloadBlob(blob, `${projectName(project)}.json`);
               setStatus('그림과 녹음이 포함된 작품 파일을 저장했어요.');
             })}>작품 파일 받기</button>
-            <button className="class-primary" disabled={disabled} aria-label={`${project.title} 영상 받기`} onClick={() => void run(async () => {
+            <button className="class-primary" disabled={disabled} aria-label={`${project.title} 영상 다운로드`} onClick={() => void run(async () => {
               const value = project.source === 'device' ? await deviceProject(project) : await readClassProject(await serverProjectUrl(project));
               if (alive.current) setMovie({project: value, name: projectName(project)});
-            })}>영상 받기</button>
+            })}>영상 다운로드</button>
           </div>
         </li>;
       })}
@@ -193,7 +202,7 @@ export function TeacherDownloads({onSessionExpired, onLock, locking}: {
   return <section className="class-teacher class-downloads">
     <div className="class-heading">
       <div><span className="class-eyebrow">교사 화면</span><h1>작품 다운로드</h1></div>
-      <div className="class-download-actions"><a className="class-download-link" href="/class/teacher">수업 관리</a><button disabled={disabled} onClick={onLock}>화면 잠그기</button></div>
+      <div className="class-download-actions"><a className="class-download-link" href="/class/teacher">수업 관리 · 영상 합치기</a><button disabled={disabled} onClick={onLock}>화면 잠그기</button></div>
     </div>
     <div className="class-download-toolbar">
       <p>영상은 작품별로 만들 수 있어요. 작품 파일에는 그림, 녹음, 편집 내용이 들어 있어요.</p>
@@ -212,7 +221,7 @@ export function TeacherDownloads({onSessionExpired, onLock, locking}: {
       {projectList(device, deviceError, '이 브라우저에 저장된 작품이 없어요.')}
     </section>
     <section className="class-download-section" aria-labelledby="class-works">
-      <h2 id="class-works">수업에서 저장한 작품</h2>
+      <h2 id="class-works">수업에 저장·제출된 작품</h2>
       {projectList(server, serverError, '수업코드로 입장해 저장한 작품이 아직 없어요.')}
     </section>
     {movie && <DrawingMovieDialog project={movie.project} downloadName={movie.name} onClose={() => setMovie(null)}/>}

@@ -3,10 +3,11 @@ import {authenticated,checkPin,sessionCookie,SettingsError,playDb as db,signPlay
 import {parseDrawingFile} from './drawing-project';
 import {movieSeconds} from './drawing-movie';
 import type {ClassGroup, SavedClassPage} from './play-class-client';
+import {isClassSceneNumber, type ClassSceneNumber, type SavedScenePage} from './play-class-scenes';
 const COOKIE='moakit-play-group',BUCKET='play-class-work',LIMIT=50_000_000;
 const uuid=(v:unknown):v is string=>typeof v==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
 const groupNo=(v:unknown):v is number=>Number.isInteger(v)&&Number(v)>=1&&Number(v)<=12;
-type Claim={kind:string;classId:string;group:number;expires:number;path?:string;revision?:number};
+type Claim={kind:string;classId:string;group:number;expires:number;path?:string;revision?:number;submissionId?:string};
 export function token(claim:Claim){const body=Buffer.from(JSON.stringify(claim)).toString('base64url');return `${body}.${sign('class:'+body)}`;}
 export function verify(value:string,kind:string):Claim|null{
  try{const [body,sig,...extra]=value.split('.'),expected=sign('class:'+body);if(extra.length||!sig||sig.length!==expected.length||!timingSafeEqual(Buffer.from(sig),Buffer.from(expected)))return null;const c=JSON.parse(Buffer.from(body,'base64url').toString());return c.kind===kind&&uuid(c.classId)&&groupNo(c.group)&&c.expires>Date.now()&&c.expires<=Date.now()+86400000?c:null;}catch{return null;}
@@ -57,6 +58,24 @@ async function storage(path:string,init:RequestInit={}){
 }
 function storageUrl(relative:string){return `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1${relative}`;}
 async function download(path:string|null){if(!path)return null;const r=await (await storage(`object/sign/${BUCKET}/${path}`,{method:'POST',body:JSON.stringify({expiresIn:600})})).json();return storageUrl(r.signedURL);}
+
+async function uploadUrl(path: string) {
+ const result = await (await storage(`object/upload/sign/${BUCKET}/${path}`, {method: 'POST', body: '{}'})).json();
+ return storageUrl(result.url);
+}
+
+async function readStoredProject(path: string) {
+ const response = await storage(`object/${BUCKET}/${path}`);
+ if (Number(response.headers.get('content-length')) > LIMIT) throw new SettingsError('작품 용량이 커요.', 413);
+ const raw = await response.text();
+ if (Buffer.byteLength(raw) > LIMIT) throw new SettingsError('작품 용량이 커요.', 413);
+ try {
+  return parseDrawingFile(raw);
+ } catch {
+  throw new SettingsError('작품 파일을 읽지 못했어요. 작품을 다시 확인해 주세요.');
+ }
+}
+
 async function lookup(request:Request,code:unknown){
  const valid=typeof code==='string'&&/^\d{6}$/.test(code);const rows=valid?await db(`play_classrooms?code=eq.${code}&is_open=eq.true&select=*`):[];
  const ip=(request.headers.get('x-vercel-forwarded-for')||request.headers.get('x-forwarded-for')||'local').split(',')[0];
@@ -64,6 +83,93 @@ async function lookup(request:Request,code:unknown){
  if(!ok)throw new SettingsError('수업코드를 여러 번 잘못 입력했어요. 선생님에게 확인하고 10분 뒤 다시 해 주세요.',429);
  if(!rows[0])throw new SettingsError('열린 수업이 없어요. 숫자 6자리를 확인해 주세요.',404);return rows[0];
 }
+
+type SceneRow = {
+ id: string; class_id: string; group_no: number; scene_no: ClassSceneNumber;
+ title: string; scene_count: number; submitted_at: string;
+ play_classrooms: {title: string};
+};
+
+const scenePath = (classId: string, group: number, id: string) => `scenes/${classId}/${group}/${id}.json`;
+
+async function savedScenes(b: Record<string, unknown>): Promise<SavedScenePage> {
+ const {classId, group, afterId} = b;
+ if ((classId !== undefined && !uuid(classId)) || (group !== undefined && (!groupNo(group) || !uuid(classId))) ||
+     (afterId !== undefined && !uuid(afterId))) throw new SettingsError('수업이나 모둠을 다시 골라 주세요.');
+ const filters = `${classId === undefined ? '' : `&class_id=eq.${classId}`}` +
+  `${group === undefined ? '' : `&group_no=eq.${group}`}${afterId === undefined ? '' : `&id=gt.${afterId}`}`;
+ const pageSize = 100;
+ const rows: SceneRow[] = await db(
+  'play_scene_submissions?select=id,class_id,group_no,scene_no,title,scene_count,submitted_at,play_classrooms!inner(title)' +
+  `&submitted_at=not.is.null&order=id.asc&limit=${pageSize + 1}${filters}`,
+ );
+ const projects = rows.slice(0, pageSize).map(row => ({
+  id: row.id, classId: row.class_id, classTitle: row.play_classrooms.title, group: row.group_no,
+  scene: row.scene_no, title: row.title, scenes: row.scene_count, updatedAt: row.submitted_at,
+ }));
+ return {projects, next: rows.length > pageSize ? projects[pageSize - 1].id : null};
+}
+
+async function sceneUploadScope(request: Request, body: Record<string, unknown>) {
+ if (body.code !== undefined) {
+  const target = await lookup(request, body.code);
+  if (!groupNo(body.group) || body.group > target.group_count) throw new SettingsError('모둠을 다시 골라 주세요.');
+  return {classId: target.id as string, group: body.group};
+ }
+ const current = scope(request, body);
+ if (!(await room(current.classId)).is_open) throw new SettingsError('선생님이 수업을 마쳤어요.', 423);
+ return current;
+}
+
+async function cleanupSceneUploads(classId: string, group: number) {
+ // Both the signed upload link and the submission ticket have expired by this point.
+ const before = encodeURIComponent(new Date(Date.now() - 86_400_000).toISOString());
+ const pending = `play_scene_submissions?class_id=eq.${classId}&group_no=eq.${group}&submitted_at=is.null&created_at=lt.${before}`;
+ const rows: {id: string}[] = await db(`${pending}&select=id&limit=20`);
+ if (!rows.length) return;
+ await storage(`object/${BUCKET}`, {method: 'DELETE', body: JSON.stringify({prefixes: rows.map(row => scenePath(classId, group, row.id))})});
+ await db(`${pending}&id=in.(${rows.map(row => row.id).join(',')})`, {method: 'DELETE'});
+}
+
+async function startSceneUpload(request: Request, body: Record<string, unknown>) {
+ if (!isClassSceneNumber(body.scene)) throw new SettingsError('보낼 장면 번호를 골라 주세요.');
+ if (!Number.isInteger(body.bytes) || Number(body.bytes) < 1 || Number(body.bytes) > LIMIT) {
+  throw new SettingsError('작품은 50MB까지 보낼 수 있어요.', 413);
+ }
+ const s = await sceneUploadScope(request, body);
+ const allowed = await db('rpc/play_film_rate_limit', {method: 'POST', body: JSON.stringify({
+  p_bucket: sign(`scene-upload:${s.classId}:${s.group}`), p_limit: 30, p_seconds: 60,
+ })});
+ if (!allowed) throw new SettingsError('보내는 작품이 많아요. 잠시 뒤 다시 눌러 주세요.', 429);
+ const submissionId = randomUUID();
+ const url = await uploadUrl(scenePath(s.classId, s.group, submissionId));
+ await db('play_scene_submissions', {method: 'POST', body: JSON.stringify({
+  id: submissionId, class_id: s.classId, group_no: s.group, scene_no: body.scene,
+ })});
+ await cleanupSceneUploads(s.classId, s.group).catch(() => {});
+ return reply({url, ticket: token({kind: 'scene-upload', ...s, submissionId, expires: Date.now() + 3_600_000})});
+}
+
+async function submitScene(ticket: unknown) {
+ const claim = typeof ticket === 'string' ? verify(ticket, 'scene-upload') : null;
+ if (!claim || !uuid(claim.submissionId)) throw new SettingsError('보내는 시간이 지났어요. 다시 보내 주세요.', 401);
+ const {classId, group, submissionId} = claim;
+ const [existing]: {id: string; submitted_at: string | null; scene_no: ClassSceneNumber}[] = await db(
+  `play_scene_submissions?id=eq.${submissionId}&class_id=eq.${classId}&group_no=eq.${group}&select=id,submitted_at,scene_no`,
+ );
+ if (!existing) throw new SettingsError('보낼 작품을 다시 골라 주세요.', 404);
+ if (existing.submitted_at) return reply({id: existing.id, submittedAt: existing.submitted_at});
+ const project = await readStoredProject(scenePath(classId, group, submissionId));
+ const [saved]: {id: string; submitted_at: string}[] = await db('rpc/play_finish_scene_submission', {
+  method: 'POST', headers: {Prefer: 'return=representation'}, body: JSON.stringify({
+   p_id: submissionId, p_class: classId, p_group: group,
+   p_title: project.title.trim() || `장면${existing.scene_no}`, p_count: project.scenes.length,
+  }),
+ });
+ if (!saved) throw new SettingsError('선생님이 수업을 마쳤어요. 기기에 보관된 작품에서 다시 보낼 수 있어요.', 423);
+ return reply({id: saved.id, submittedAt: saved.submitted_at});
+}
+
 async function cleanup(classId:string,n:number,currentPath:string){
  // Keep recent versions for in-flight teacher downloads and interrupted saves.
  const old=await db(`play_class_uploads?class_id=eq.${classId}&group_no=eq.${n}&created_at=lt.${encodeURIComponent(new Date(Date.now()-86400000).toISOString())}&path=neq.${encodeURIComponent(currentPath)}&limit=50&select=path`);
@@ -80,6 +186,25 @@ export async function classAction(request:Request,b:Record<string,unknown>):Prom
  if(action==='join'){
   const r=await lookup(request,b.code);if(!groupNo(b.group)||b.group>r.group_count)throw new SettingsError('모둠을 골라 주세요.');
   return reply({room:r,group:b.group},200,{'Set-Cookie':cookie(token({kind:'group',classId:r.id,group:b.group,expires:Date.now()+28800000}))});
+ }
+ if (action === 'student-room') {
+  const s = scope(request, b);
+  return reply({room: await room(s.classId)});
+ }
+ if (action === 'scene-upload') return startSceneUpload(request, b);
+ if (action === 'scene-submit') return submitScene(b.ticket);
+ if (action === 'saved-scenes') {
+  teacher(request);
+  return reply(await savedScenes(b));
+ }
+ if (action === 'scene-work') {
+  teacher(request);
+  if (!uuid(b.submissionId)) throw new SettingsError('장면을 다시 골라 주세요.');
+  const [work]: {id: string; class_id: string; group_no: number}[] = await db(
+   `play_scene_submissions?id=eq.${b.submissionId}&submitted_at=not.is.null&select=id,class_id,group_no`,
+  );
+  if (!work) throw new SettingsError('제출된 장면을 찾지 못했어요.', 404);
+  return reply({url: await download(scenePath(work.class_id, work.group_no, work.id))});
  }
  if(action==='list'){teacher(request);return reply({rooms:await db('play_classrooms?select=*&order=created_at.desc&limit=100')});}
  if (action === 'saved-projects') {
@@ -106,9 +231,9 @@ export async function classAction(request:Request,b:Record<string,unknown>):Prom
   if(!Number.isInteger(b.bytes)||Number(b.bytes)<1||Number(b.bytes)>LIMIT)throw new SettingsError('모둠 작품은 50MB까지 저장할 수 있어요. 쓰지 않는 그림을 줄여 주세요.',413);
   const allowed=await db('rpc/play_film_rate_limit',{method:'POST',body:JSON.stringify({p_bucket:sign(`upload:${s.classId}:${s.group}`),p_limit:30,p_seconds:60})});if(!allowed)throw new SettingsError('저장 중이에요. 잠시 뒤 다시 눌러 주세요.',429);
   const path=`${s.classId}/${s.group}/${randomUUID()}.json`;
-  const result=await (await storage(`object/upload/sign/${BUCKET}/${path}`,{method:'POST',body:'{}'})).json();
+  const url=await uploadUrl(path);
   await db('play_class_uploads',{method:'POST',body:JSON.stringify({path,class_id:s.classId,group_no:s.group})});
-  return reply({url:storageUrl(result.url),ticket:token({kind:'upload',...s,path,revision:g.revision,expires:Date.now()+3600000})});
+  return reply({url,ticket:token({kind:'upload',...s,path,revision:g.revision,expires:Date.now()+3600000})});
  }
  if(action==='save'){
   const s=scope(request,b),claim=typeof b.ticket==='string'?verify(b.ticket,'upload'):null;
@@ -116,10 +241,7 @@ export async function classAction(request:Request,b:Record<string,unknown>):Prom
   const existing=await group(s.classId,s.group);if(existing.object_path===claim.path)return reply({revision:existing.revision,submitted:existing.submitted}); // idempotent network retry
   if(existing.revision!==claim.revision)throw new SettingsError('다른 패드의 새 작품이 있어요. 새 작품을 불러와 주세요.',409);
   if(!(await room(s.classId)).is_open)throw new SettingsError('선생님이 수업을 마쳤어요.',423);
-  const response=await storage(`object/${BUCKET}/${claim.path}`);
-  if(Number(response.headers.get('content-length'))>LIMIT)throw new SettingsError('작품 용량이 커요.',413);
-  const raw=await response.text();if(Buffer.byteLength(raw)>LIMIT)throw new SettingsError('작품 용량이 커요.',413);
-  let project;try{project=parseDrawingFile(raw);}catch{throw new SettingsError('작품 파일을 확인해 주세요. 이전 저장은 그대로예요.');}
+  const project=await readStoredProject(claim.path);
   const rows=await db('rpc/play_save_group',{method:'POST',body:JSON.stringify({p_class:s.classId,p_group:s.group,p_revision:claim.revision,p_path:claim.path,p_summary:{title:project.title,scenes:project.scenes.length,seconds:movieSeconds(project),voices:project.scenes.filter(sc=>!!sc.voice).length},p_submitted:b.submitted===true})});
   if(!rows[0])throw new SettingsError('다른 패드의 새 저장 또는 수업 종료가 확인됐어요. 새 작품을 불러와 주세요.',409);
   await cleanup(s.classId,s.group,claim.path).catch(()=>{});
