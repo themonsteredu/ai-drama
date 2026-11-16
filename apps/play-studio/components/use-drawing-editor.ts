@@ -23,6 +23,7 @@ function safeItemPoint(item:DrawingItem,asset:DrawingAsset,pos:{x:number;y:numbe
 
 export function useDrawingEditor(storageKey='active',initialProject=emptyDrawingProject){
   const [project,setProject]=useState<DrawingProject>(initialProject),projectRef=useRef(project);
+  const savedProject=useRef<DrawingProject|null>(null);
   const [selectedId,setSelectedId]=useState<string>(),[playing,setPlaying]=useState(false),[reset,setReset]=useState(0),[destination,setDestination]=useState(false);
   const [loaded,setLoaded]=useState(false),[blocked,setBlocked]=useState(false),[saveState,setSaveState]=useState('불러오는 중'),[error,setError]=useState(''),[busy,setBusy]=useState(false);
   const [recording,setRecording]=useState(false),[recordSeconds,setRecordSeconds]=useState(0),[storyPlaying,setStoryPlaying]=useState(false),[voicePlaying,setVoicePlaying]=useState(false);
@@ -32,9 +33,37 @@ export function useDrawingEditor(storageKey='active',initialProject=emptyDrawing
   const clock=useRef(0),past=useRef<DrawingProject[]>([]),future=useRef<DrawingProject[]>([]);
   const drag=useRef<{id:string;pointerId:number;dx:number;dy:number;start:DrawingProject;moved:boolean}|null>(null);
   const scene=project.scenes.find(s=>s.id===project.activeSceneId)??project.scenes[0],selected=scene.items.find(i=>i.id===selectedId),selectedAsset=project.assets.find(a=>a.id===selected?.assetId);
-  useEffect(()=>{let gone=false;void loadDrawing(storageKey).then(p=>{if(gone)return;if(p){projectRef.current=p;setProject(p);}}).catch(cause=>{if(!gone){setBlocked(true);setSaveState('저장 확인 필요');setError(cause instanceof Error?cause.message:'저장 내용을 읽지 못했어요.');}}).finally(()=>{if(!gone)setLoaded(true);});return()=>{gone=true;};},[]);
-  useEffect(()=>{if(!loaded||blocked)return;let canceled=false;setSaveState('저장 중');const timer=setTimeout(()=>{void saveDrawing(project,storageKey).then(()=>{if(!canceled)setSaveState('이 기기에 저장됨');}).catch(()=>{if(!canceled){setSaveState('저장 확인 필요');setError('기기 저장을 마치지 못했어요. 작품 파일로 보관해 주세요.');}});},350);return()=>{canceled=true;clearTimeout(timer);};},[project,loaded,blocked]);
-  useEffect(()=>{if(!loaded||blocked)return;const flush=()=>{void saveDrawing(projectRef.current,storageKey).catch(()=>{});};const hidden=()=>{if(document.visibilityState==='hidden'){pause();flush();}};window.addEventListener('pagehide',flush);document.addEventListener('visibilitychange',hidden);return()=>{window.removeEventListener('pagehide',flush);document.removeEventListener('visibilitychange',hidden);};},[loaded,blocked]);
+  useEffect(()=>{let gone=false;void loadDrawing(storageKey).then(p=>{if(gone)return;if(p){savedProject.current=p;projectRef.current=p;setProject(p);}}).catch(cause=>{if(!gone){setBlocked(true);setSaveState('저장 확인 필요');setError(cause instanceof Error?cause.message:'저장 내용을 읽지 못했어요.');}}).finally(()=>{if(!gone)setLoaded(true);});return()=>{gone=true;};},[]);
+  useEffect(()=>{
+    if(!loaded||blocked)return;
+    if(savedProject.current===project){setSaveState('이 기기에 저장됨');return;}
+    let canceled=false;
+    setSaveState('저장 중');
+    const timer=setTimeout(()=>{
+      void saveDrawing(project,storageKey).then(()=>{
+        savedProject.current=project;
+        if(!canceled)setSaveState('이 기기에 저장됨');
+      }).catch(()=>{
+        if(!canceled){setSaveState('저장 확인 필요');setError('기기 저장을 마치지 못했어요. 작품 파일로 보관해 주세요.');}
+      });
+    },350);
+    return()=>{canceled=true;clearTimeout(timer);};
+  },[project,loaded,blocked,storageKey]);
+  useEffect(()=>{
+    if(!loaded||blocked)return;
+    const flush=()=>{
+      const latest=projectRef.current;
+      if(savedProject.current!==latest)void saveDrawing(latest,storageKey).then(()=>{savedProject.current=latest;}).catch(()=>{});
+    };
+    const hidden=()=>{if(document.visibilityState==='hidden'){pause();flush();}};
+    window.addEventListener('pagehide',flush);
+    document.addEventListener('visibilitychange',hidden);
+    return()=>{
+      window.removeEventListener('pagehide',flush);
+      document.removeEventListener('visibilitychange',hidden);
+      flush();
+    };
+  },[loaded,blocked,storageKey]);
   function pause(){if(storyOn.current){stop();return;}musicPlayer.current?.pause();setPlaying(false);}
   function start(){musicPlayer.current??=new DrawingMusicPlayer();musicPlayer.current.play(projectRef.current,projectRef.current.scenes.find(s=>s.id===projectRef.current.activeSceneId)!,setError);setDestination(false);setPlaying(true);}
   function endStory(){storyOn.current=false;storyEpoch.current++;clearTimeout(storyTimer.current);voicePlayer.current?.stop();setVoicePlaying(false);setStoryPlaying(false);}

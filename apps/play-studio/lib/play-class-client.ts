@@ -69,7 +69,7 @@ export async function submitSceneProject(
  project: DrawingProject, destination: {classId: string; group: number} | {code: string; group: number}, scene: ClassSceneNumber,
 ) {
  const ticket = await uploadProjectFile(project, {action: 'scene-upload', ...destination, scene});
- const finish = () => classApi<{id: string; submittedAt: string}>({action: 'scene-submit', ticket});
+ const finish = () => classApi<{id: string; submittedAt: string; isLatest?: boolean}>({action: 'scene-submit', ticket});
  try {
   return await finish();
  } catch (cause) {

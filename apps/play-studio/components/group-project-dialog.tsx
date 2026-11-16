@@ -41,7 +41,7 @@ export function GroupProjectDialog({project,onApply,onClose,onVideos,initialWork
   if(lock.current)return;lock.current=true;setBusy(true);setError('');
   try{
    const result=await mergeGroupProjects(works,title,message=>{if(alive.current)setStatus(message);});
-   await loadDrawingImages(result.assets);
+   if(!videoOnly)await loadDrawingImages(result.assets);
    if(alive.current){onApply(result);onClose();}
   }catch(cause){if(alive.current)setError(cause instanceof Error?cause.message:'장면을 모으지 못했어요.');}
   finally{lock.current=false;if(alive.current){setBusy(false);setStatus('');}}

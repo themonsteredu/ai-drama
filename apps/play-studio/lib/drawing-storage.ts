@@ -12,6 +12,7 @@ function openDatabase(){
   return database;
 }
 export async function loadDrawing(key='active'):Promise<DrawingProject|null>{
+  await writes.catch(()=>{});
   const db=await openDatabase();return new Promise((resolve,reject)=>{
     const tx=db.transaction('projects','readonly');const request=tx.objectStore('projects').get(key);
     request.onerror=()=>reject(request.error);

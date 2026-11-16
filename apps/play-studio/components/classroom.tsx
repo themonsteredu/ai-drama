@@ -1,6 +1,8 @@
 'use client';
 
 import {useCallback, useEffect, useRef, useState} from 'react';
+import dynamic from 'next/dynamic';
+import Link from 'next/link';
 import {
   ClassError, classApi, classProjectUrl, classStorageKey, readClassProject,
   type Classroom as Room, type ClassGroup,
@@ -11,16 +13,18 @@ import {emptyDrawingProject, type DrawingProject} from '@/lib/drawing-project';
 import type {GroupWork} from '@/lib/group-project';
 import {clockLabel} from '@/lib/drawing-movie';
 import {fileName} from '@/lib/project-files';
-import {DrawingStudio} from './drawing-studio';
-import {DrawingMovieDialog} from './drawing-movie-dialog';
 import {ClassroomWorkBar, localClassState, saveClassState} from './classroom-work';
-import {GroupProjectDialog} from './group-project-dialog';
-import {GroupMovieDialog} from './group-movie-dialog';
 import {SceneNumberPicker} from './scene-submit-dialog';
-import {StudentSceneWork} from './student-scene-work';
-import {TeacherDownloads} from './teacher-downloads';
-import {TeacherScenePanel} from './teacher-scene-panel';
 import './classroom.css';
+
+const loadingStudio = () => <main className="class-page"><p role="status">편집 화면을 준비하고 있어요…</p></main>;
+const DrawingStudio = dynamic(() => import('./drawing-studio').then(module => module.DrawingStudio), {loading: loadingStudio});
+const StudentSceneWork = dynamic(() => import('./student-scene-work').then(module => module.StudentSceneWork), {loading: loadingStudio});
+const DrawingMovieDialog = dynamic(() => import('./drawing-movie-dialog').then(module => module.DrawingMovieDialog));
+const GroupProjectDialog = dynamic(() => import('./group-project-dialog').then(module => module.GroupProjectDialog));
+const GroupMovieDialog = dynamic(() => import('./group-movie-dialog').then(module => module.GroupMovieDialog));
+const TeacherDownloads = dynamic(() => import('./teacher-downloads').then(module => module.TeacherDownloads));
+const TeacherScenePanel = dynamic(() => import('./teacher-scene-panel').then(module => module.TeacherScenePanel));
 
 type ClassroomGroup = {room: Room; group: number};
 type Work = ClassroomGroup & {revision: number; dirty: boolean; conflict: boolean; key: number};
@@ -110,15 +114,15 @@ export function Classroom({teacherMode = false, downloadMode = false}: {teacherM
     setWork({room: result.room, group, revision, dirty, conflict: dirty && revision !== result.revision, key: Date.now()});
   }
 
-  async function resumeStudent(classId: string, group: number) {
+  async function resumeStudent(classId: string, group: number, currentRoom?: Room) {
     const choice = workspaceChoice(classId, group);
     if (choice === 'shared' || (!choice && localClassState(classStorageKey(classId, group)))) {
       await enterShared(classId, group);
       return;
     }
-    const result = await classApi<{room: Room}>({action: 'student-room', classId, group});
-    setRoom(result.room);
-    setStudentGroup({room: result.room, group});
+    const loadedRoom = currentRoom ?? (await classApi<{room: Room}>({action: 'student-room', classId, group})).room;
+    setRoom(loadedRoom);
+    setStudentGroup({room: loadedRoom, group});
     const scene = Number(choice);
     if (isClassSceneNumber(scene)) setStudentScene(scene);
   }
@@ -127,11 +131,16 @@ export function Classroom({teacherMode = false, downloadMode = false}: {teacherM
     let active = true;
     void (async () => {
       try {
-        const session = await classApi<{teacher: boolean; student: {classId: string; group: number} | null}>({action: 'session'});
+        const session = await classApi<{teacher: boolean; student: {classId: string; group: number} | null; room?: Room; rooms?: Room[]}>({
+          action: 'session', includeRoom: !teacherMode, includeRooms: teacherMode && !downloadMode,
+        });
         if (!active) return;
         setTeacher(session.teacher);
-        if (teacherMode && session.teacher && !downloadMode) await listRooms();
-        if (!teacherMode && session.student) await resumeStudent(session.student.classId, session.student.group);
+        if (teacherMode && session.teacher && !downloadMode) {
+          if (session.rooms) setRooms(session.rooms);
+          else await listRooms();
+        }
+        if (!teacherMode && session.student) await resumeStudent(session.student.classId, session.student.group, session.room);
       } catch (cause) {
         if (active) setError(cause instanceof Error ? cause.message : '연결을 확인해 주세요.');
       } finally {
@@ -161,10 +170,11 @@ export function Classroom({teacherMode = false, downloadMode = false}: {teacherM
   }, [teacherMode, teacher, room?.id, teacherEdit, expireSession]);
 
   async function login() {
-    await classApi({action: 'teacher-login', pin});
+    const result = await classApi<{rooms?: Room[]}>({action: 'teacher-login', pin, includeRooms: !downloadMode});
     setPin('');
     setTeacher(true);
-    if (!downloadMode) await listRooms();
+    if (result.rooms) setRooms(result.rooms);
+    else if (!downloadMode) await listRooms();
   }
 
   async function lockTeacher() {
@@ -227,8 +237,8 @@ export function Classroom({teacherMode = false, downloadMode = false}: {teacherM
 
   return <main className="class-page">
     <header>
-      <a href="/class" className="class-brand">MOAKIT <b>PLAY</b></a>
-      <nav><a href="/draw">내 기기의 작품</a>{teacherMode ? <a href="/class">학생 화면</a> : <a href="/class/teacher">교사 화면</a>}</nav>
+      <Link href="/class" className="class-brand">MOAKIT <b>PLAY</b></Link>
+      <nav><Link href="/draw">내 기기의 작품</Link>{teacherMode ? <Link href="/class">학생 화면</Link> : <Link href="/class/teacher">교사 화면</Link>}</nav>
     </header>
     {!teacherMode ? <section className="class-entry">
       <span className="class-eyebrow">우리 모둠 이야기 만들기</span>
@@ -274,7 +284,7 @@ export function Classroom({teacherMode = false, downloadMode = false}: {teacherM
       <div className="class-heading">
         <div><span className="class-eyebrow">교사 화면</span><h1>우리 반 작품 모으기</h1></div>
         <div className="class-download-actions">
-          <a className="class-download-link" href="/class/teacher/downloads">작품 다운로드</a>
+          <Link className="class-download-link" href="/class/teacher/downloads">작품 다운로드</Link>
           <button disabled={busy} onClick={() => void run(lockTeacher)}>교사 화면 잠그기</button>
         </div>
       </div>
@@ -302,7 +312,7 @@ export function Classroom({teacherMode = false, downloadMode = false}: {teacherM
               setPicked([]);
               await roster(item.id);
             })}><strong>{item.title}</strong><span>{item.code} · {item.is_open ? '진행 중' : '마침'}</span></button>)}</div>
-          <a href="/settings">GPT API 설정</a>
+          <Link href="/settings">GPT API 설정</Link>
           <button disabled={busy} onClick={() => setMerge({works: [], video: true})}>작품 파일로 영상 합치기</button>
           <button disabled={busy} onClick={() => setVideos(true)}>완성된 영상 파일 합치기</button>
         </aside>

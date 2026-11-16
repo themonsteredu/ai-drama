@@ -4,6 +4,7 @@ import {useEffect, useRef, useState} from 'react';
 import {classApi, submitSceneProject, type Classroom} from '@/lib/play-class-client';
 import {CLASS_SCENE_NUMBERS, type ClassSceneNumber} from '@/lib/play-class-scenes';
 import type {DrawingProject} from '@/lib/drawing-project';
+import {submitSceneSnapshot} from '@/lib/play-scene-projection';
 import './class-scenes.css';
 
 type SelectedScene = {room: Classroom; group: number; scene: ClassSceneNumber};
@@ -30,6 +31,7 @@ export function SceneSubmitDialog({project, selected, onSubmitted, onClose}: {
   const [room, setRoom] = useState<Classroom | null>(selected?.room ?? null);
   const [group, setGroup] = useState(selected?.group ?? 0);
   const [scene, setScene] = useState<ClassSceneNumber | null>(selected?.scene ?? null);
+  const [sourceScene, setSourceScene] = useState(project.activeSceneId);
   const [busy, setBusy] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState('');
@@ -66,7 +68,12 @@ export function SceneSubmitDialog({project, selected, onSubmitted, onClose}: {
 
   async function submit() {
     if (!room || !group || !scene) return;
-    await submitSceneProject(project, selected ? {classId: room.id, group} : {code: room.code, group}, scene);
+    const snapshot = await submitSceneSnapshot(project, sourceScene);
+    const result = await submitSceneProject(snapshot, selected ? {classId: room.id, group} : {code: room.code, group}, scene);
+    if (result.isLatest === false) {
+      setError('같은 번호로 더 최근에 보낸 작품이 있어요. 선생님 화면에는 최신 작품이 보여요.');
+      return;
+    }
     setSubmitted(true);
     onSubmitted?.(scene);
   }
@@ -94,6 +101,12 @@ export function SceneSubmitDialog({project, selected, onSubmitted, onClose}: {
           </select>
         </>}
         <SceneNumberPicker label="제출할 장면 번호" value={scene} disabled={busy} onPick={setScene}/>
+        {project.scenes.length > 1 && <>
+          <label htmlFor="scene-submit-source">보낼 그림 장면</label>
+          <select id="scene-submit-source" value={sourceScene} disabled={busy} onChange={event => setSourceScene(event.target.value)}>
+            {project.scenes.map((item, index) => <option key={item.id} value={item.id}>{index + 1}번째 · {item.title}</option>)}
+          </select>
+        </>}
         <button className="scene-primary" disabled={busy || !group || !scene}>{busy ? '작품을 보내고 있어요…' : '선생님께 보내기'}</button>
         {!selected && <button type="button" disabled={busy} onClick={() => {setRoom(null); setError('');}}>수업코드 다시 입력</button>}
       </form>}

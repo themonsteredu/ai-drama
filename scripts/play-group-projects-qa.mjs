@@ -30,4 +30,49 @@ try{
  const fullMerged=assembleGroupProjects([{id:'full',name:'전체녹음 모둠',project:full}],'전체녹음 합치기',[prepared]);assert(validateDrawingProject(fullMerged));assert.equal(fullMerged.narration,undefined);assert.equal(movieSeconds(fullMerged),5.125);assert.deepEqual(movieTimeline(fullMerged).map(s=>s.seconds),[1.125,1,2,1]);assert.throws(()=>assembleGroupProjects([{id:'full',name:'모둠',project:full}],'missing audio'));
  const silent=new Map(prepared);silent.set(full.scenes[3].id,undefined);const silentTail=assembleGroupProjects([{id:'full',name:'모둠',project:full}],'silent tail',[silent]);assert.equal(movieSeconds(silentTail),5.125,'short silent tail must keep its original duration');
  console.log('PASS: whole narration sample boundaries cover every sample once, becomes per-scene audio before reordering, retains exact timings including short silence, and missing narration cannot silently disappear.');
+
+ const {submitSceneSnapshot,savedSceneSnapshot}=local('./apps/play-studio/lib/play-scene-projection.js');
+ const {wavBytes}=local('./apps/play-studio/lib/film-narration.js');
+ const distinct={
+  ...p,
+  activeSceneId:p.scenes[3].id,
+  assets:[...p.assets,{...p.assets[0],id:'unused-picture'},{...p.assets[0],id:'cutout-original'}],
+  musicAssets:[...p.musicAssets,{...p.musicAssets[0],id:'audio-unused'}],
+  scenes:p.scenes.map((scene,index)=>index===1?{...scene,items:scene.items.map(item=>({...item,separation:{...item.separation,sourceAssetId:'cutout-original'}}))}:scene),
+ };
+ const originalSnapshot=JSON.stringify(distinct);
+ const projected=await submitSceneSnapshot(distinct,distinct.scenes[1].id);
+ assert.equal(projected.scenes.length,1);
+ assert.equal(projected.activeSceneId,distinct.scenes[1].id);
+ assert.deepEqual(projected.assets.map(asset=>asset.id),['same-picture','cutout-original']);
+ assert.deepEqual(projected.musicAssets.map(asset=>asset.id),['audio-same']);
+ assert.equal(movieSeconds(projected),movieTimeline(distinct)[1].seconds);
+ assert.deepEqual(projected.scenes[0].voice,distinct.scenes[1].voice);
+ assert(validateDrawingProject(projected));
+ assert.equal(JSON.stringify(distinct),originalSnapshot);
+ assert.equal((await savedSceneSnapshot(distinct,2)).activeSceneId,distinct.scenes[1].id);
+ assert.equal((await savedSceneSnapshot(distinct,5)).activeSceneId,distinct.activeSceneId);
+ assert.strictEqual(await savedSceneSnapshot(projected,2),projected);
+ const joined=assembleGroupProjects([{id:'new-submission',name:'장면2',project:projected,sceneSubmission:true}], '한 장면');
+ assert.equal(joined.scenes[0].title,'장면2');
+
+ // The export helper receives decoded samples; supply deterministic samples for an exact boundary check.
+ const audio=new Float32Array(82000).fill(.5);
+ audio.fill(.25,18000,34000);
+ globalThis.AudioContext=class {
+  async decodeAudioData(){return {duration:audio.length/16000,sampleRate:16000,numberOfChannels:1,getChannelData:()=>audio};}
+  async close(){}
+ };
+ globalThis.FileReader=class {
+  async readAsDataURL(blob){this.result='data:audio/wav;base64,'+Buffer.from(await blob.arrayBuffer()).toString('base64');this.onload();}
+ };
+ const clipProject=await submitSceneSnapshot(full,full.scenes[1].id);
+ const clip=clipProject.scenes[0].voice;
+ assert.equal(clip.duration,1);
+ assert.equal(movieSeconds(clipProject),1);
+ assert.deepEqual(Buffer.from(clip.source.split(',')[1],'base64'),Buffer.from(wavBytes(new Float32Array(16000).fill(.25))));
+ assert.equal(clipProject.narration,undefined);
+ assert.equal(full.scenes.length,4);
+ assert(validateDrawingProject(clipProject));
+ console.log('PASS: one numbered scene is sent, unused assets are removed, legacy works use the corresponding scene, and full narration cuts at the original sample boundaries.');
 }finally{await fs.rm(temp,{recursive:true,force:true});}

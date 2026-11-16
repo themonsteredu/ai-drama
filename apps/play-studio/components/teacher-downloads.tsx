@@ -1,6 +1,7 @@
 'use client';
 
 import {useEffect, useRef, useState} from 'react';
+import Link from 'next/link';
 import {
   ClassError, classApi, classProjectUrl, fetchClassProject, listSceneProjects, readClassProject, sceneProjectUrl,
   type SavedClassPage, type SavedClassProject,
@@ -9,6 +10,7 @@ import type {SavedSceneProject} from '@/lib/play-class-scenes';
 import {listSavedDrawings, loadDrawing, type SavedDeviceProject} from '@/lib/drawing-storage';
 import type {DrawingProject} from '@/lib/drawing-project';
 import {downloadBlob, fileName} from '@/lib/project-files';
+import {savedSceneSnapshot} from '@/lib/play-scene-projection';
 import {DrawingMovieDialog} from './drawing-movie-dialog';
 import './teacher-downloads.css';
 
@@ -178,7 +180,7 @@ export function TeacherDownloads({onSessionExpired, onLock, locking}: {
     if (!entries.length) return <p>{empty}</p>;
     return <ul className="class-download-list">
       {entries.map(project => {
-        const detail = [sourceLabel(project), project.scenes && `${project.scenes}장면`, formattedDate(project.updatedAt)].filter(Boolean).join(' · ');
+        const detail = [sourceLabel(project), project.source !== 'scene' && project.scenes && `${project.scenes}장면`, formattedDate(project.updatedAt)].filter(Boolean).join(' · ');
         const key = project.source === 'device' ? project.key : project.source === 'scene' ? project.id : `${project.classId}:${project.group}`;
         return <li key={key}>
           <div><strong>{project.title}</strong><small>{detail}</small></div>
@@ -191,7 +193,8 @@ export function TeacherDownloads({onSessionExpired, onLock, locking}: {
             })}>작품 파일 받기</button>
             <button className="class-primary" disabled={disabled} aria-label={`${project.title} 영상 미리보기·다운로드`} onClick={() => void run(async () => {
               const value = project.source === 'device' ? await deviceProject(project) : await readClassProject(await serverProjectUrl(project));
-              if (alive.current) setMovie({project: value, name: projectName(project)});
+              const video = project.source === 'scene' ? await savedSceneSnapshot(value, project.scene) : value;
+              if (alive.current) setMovie({project: video, name: projectName(project)});
             })}>영상 미리보기·다운로드</button>
           </div>
         </li>;
@@ -202,7 +205,7 @@ export function TeacherDownloads({onSessionExpired, onLock, locking}: {
   return <section className="class-teacher class-downloads">
     <div className="class-heading">
       <div><span className="class-eyebrow">교사 화면</span><h1>작품 다운로드</h1></div>
-      <div className="class-download-actions"><a className="class-download-link" href="/class/teacher">수업 관리 · 영상 합치기</a><button disabled={disabled} onClick={onLock}>화면 잠그기</button></div>
+      <div className="class-download-actions"><Link className="class-download-link" href="/class/teacher">수업 관리 · 영상 합치기</Link><button disabled={disabled} onClick={onLock}>화면 잠그기</button></div>
     </div>
     <div className="class-download-toolbar">
       <p>영상은 작품별로 만들 수 있어요. 작품 파일에는 그림, 녹음, 편집 내용이 들어 있어요.</p>
