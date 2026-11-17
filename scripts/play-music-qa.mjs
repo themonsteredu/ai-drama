@@ -4,7 +4,8 @@ import {fileURLToPath} from 'node:url';
 import {spawn} from 'node:child_process';
 import {mkdir,readFile,writeFile} from 'node:fs/promises';
 import path from 'node:path';
-import {synthMusic,musicPresets,applyMusic,validateMusic} from '../apps/play-studio/lib/drawing-music.ts';
+import {synthMusic,musicPresets,applyMusic,validateMusic,MUSIC_FILE_LIMIT} from '../apps/play-studio/lib/drawing-music.ts';
+import {wavBytes} from '../apps/play-studio/lib/film-narration.ts';
 import {emptyDrawingProject,drawingFrame} from '../packages/stage-core/src/drawing.ts';
 const app=fileURLToPath(new URL('../apps/play-studio/',import.meta.url)),require=createRequire(path.join(app,'package.json')),{chromium,webkit}=require('playwright');
 const out=process.env.PLAY_QA_OUT||path.join(app,'qa-results');await mkdir(out,{recursive:true});
@@ -41,10 +42,9 @@ try{
    if(name==='webkit'&&process.platform==='win32'){
     // Windows Playwright WebKit plays HTTP WAV, but not data/blob audio URLs.
     // Do not fake media support or count upload playback as passed in this engine.
-    await open(page);await dialog.getByLabel('내 음악 파일 선택',{exact:true}).setInputFiles({name:'my-music.wav',mimeType:'audio/wav',buffer:wav});await dialog.getByRole('alert').waitFor();assert.match(await dialog.getByRole('alert').innerText(),/음악을 읽는 시간|재생할 수 없는/);await dialog.getByRole('button',{name:'음악 창 닫기',exact:true}).click();
     const asset={id:'audio-fixture',name:'my-music.wav',source:`data:audio/wav;base64,${wav.toString('base64')}`,duration:32*60/132};const doc=applyMusic(await saved(page),{trackId:asset.id,volume:.24,loop:false},true,asset),bytes=Buffer.from(JSON.stringify(doc));
     await page.getByLabel('내 그림 작품 파일 선택',{exact:true}).setInputFiles({name:'restore.json',mimeType:'application/json',buffer:bytes});await saved(page);await page.reload();assert.equal((await saved(page)).musicAssets[0].source,asset.source);assert.equal((await playing(page)).length,0);await open(page);assert.equal(await dialog.getByLabel('음악 소리 크기').inputValue(),'24');assert.equal(await dialog.getByLabel('반복해서 듣기').isChecked(),false);await responsive(page,dialog,name);await dialog.getByRole('button',{name:'음악 창 닫기',exact:true}).click();assert.deepEqual(errors,[]);
-    reports.push({browser:name,status:'PASS_WITH_MEDIA_LIMITATION',checks:['six actual HTTP WAV presets','preview stop and Escape','common track continuity','scene transition','pause/resume/reset','presentation auto-start and exit','silence override','inline audio unsupported error shown','uploaded asset JSON import and IndexedDB restore','1440/1024/768/390/360 modal bounds','no runtime errors'],limitation:'Windows Playwright WebKit cannot play data/blob audio URLs. Uploaded audio playback requires Safari/macOS/iOS verification; not counted as passed here.'});continue;
+    reports.push({browser:name,status:'PASS_WITH_MEDIA_LIMITATION',checks:['six actual WAV presets','preview stop and Escape','common track continuity','scene transition','pause/resume/reset','presentation auto-start and exit','silence override','uploaded asset JSON import and IndexedDB restore','1440/1024/768/390/360 modal bounds','no runtime errors'],limitation:'Windows Playwright WebKit cannot play data/blob audio URLs. Uploaded audio playback requires Safari/macOS/iOS verification; not counted as passed here.'});continue;
    }
    await open(page);await dialog.getByLabel('내 음악 파일 선택',{exact:true}).setInputFiles({name:'my-music.wav',mimeType:'audio/wav',buffer:wav});await dialog.getByRole('option',{name:'my-music.wav'}).waitFor({state:'attached'});await dialog.getByLabel('모든 장면',{exact:true}).check();await dialog.getByLabel('음악 소리 크기').fill('24');await dialog.getByLabel('반복해서 듣기').uncheck();await dialog.getByRole('button',{name:'적용하기',exact:true}).click();let doc=await saved(page);assert.equal(doc.musicAssets.length,1);assert.equal(doc.music.volume,.24);assert.equal(doc.music.loop,false);assert(doc.scenes.every(s=>s.music===undefined));
    await page.getByRole('button',{name:'▶ 움직여 보기',exact:true}).click();await waitAudio(page);assert.equal((await playing(page))[0].loop,false);assert(Math.abs((await playing(page))[0].volume-.24)<.001);
@@ -53,8 +53,27 @@ try{
    await page.reload();await saved(page);assert.equal((await playing(page)).length,0);assert.equal((await saved(page)).musicAssets[0].source,doc.musicAssets[0].source);
    await choose(page,'긴장',true);await page.getByLabel('내 그림 작품 파일 선택',{exact:true}).setInputFiles({name:'restore.json',mimeType:'application/json',buffer:bytes});await saved(page);assert.equal((await saved(page)).musicAssets[0].source,doc.musicAssets[0].source);
    await page.getByRole('button',{name:'▶ 움직여 보기',exact:true}).click();await waitAudio(page);await open(page);assert.equal((await playing(page)).length,0,'dialog pauses stage');
-   await dialog.getByLabel('내 음악 파일 선택',{exact:true}).setInputFiles({name:'bad.mp3',mimeType:'audio/mpeg',buffer:Buffer.from('not audio')});await dialog.getByRole('alert').waitFor();assert.match(await dialog.getByRole('alert').innerText(),/재생할 수 없는/);
-   await dialog.getByLabel('내 음악 파일 선택',{exact:true}).setInputFiles({name:'big.wav',mimeType:'audio/wav',buffer:Buffer.alloc(3_000_001)});await page.waitForTimeout(100);assert.match(await dialog.getByRole('alert').innerText(),/3MB/);
+   const sampleRate=48000,seconds=70,samples=new Float32Array(sampleRate*seconds*2);
+   for(let i=0;i<samples.length;i+=2){
+     samples[i]=.2*Math.sin(Math.PI*2*440*(i/2)/sampleRate);
+     samples[i+1]=.2*Math.sin(Math.PI*2*660*(i/2)/sampleRate);
+   }
+   const bigWav=Buffer.from(wavBytes(samples,sampleRate,2));
+   assert(bigWav.length>12_000_000&&bigWav.length<MUSIC_FILE_LIMIT);
+   await dialog.getByLabel('내 음악 파일 선택',{exact:true}).setInputFiles({name:'class-music.wav',mimeType:'audio/wav',buffer:bigWav});
+   await dialog.getByRole('option',{name:'class-music.wav'}).waitFor({state:'attached'});
+   await dialog.getByLabel('이 장면만',{exact:true}).check();
+   await dialog.getByRole('button',{name:'적용하기',exact:true}).click();
+   doc=await saved(page);
+   const largeAsset=doc.musicAssets.find(asset=>asset.name==='class-music.wav');
+   const restoredWav=Buffer.from(largeAsset.source.split(',')[1],'base64');
+   assert.equal(largeAsset.duration,seconds);
+   assert.equal(restoredWav.readUInt16LE(22),2);
+   assert.equal(restoredWav.readUInt32LE(24),24000);
+   assert(restoredWav.length<bigWav.length);
+   await open(page);
+   await dialog.getByLabel('내 음악 파일 선택',{exact:true}).setInputFiles({name:'bad.mp3',mimeType:'audio/mpeg',buffer:Buffer.from('not audio')});await dialog.getByRole('alert').waitFor();assert.match(await dialog.getByRole('alert').innerText(),/읽지 못했어요/);
+   await dialog.getByLabel('내 음악 파일 선택',{exact:true}).setInputFiles({name:'too-big.wav',mimeType:'audio/wav',buffer:Buffer.alloc(MUSIC_FILE_LIMIT+1)});await page.waitForTimeout(100);assert.match(await dialog.getByRole('alert').innerText(),/25MB/);
    await responsive(page,dialog,name);
    await dialog.getByRole('button',{name:'음악 창 닫기',exact:true}).click();assert.equal((await playing(page)).length,0);
    assert.deepEqual(errors,[]);reports.push({browser:name,status:'PASS',checks:['six audible PCM presets','preview stop and Escape','common track continuity','scene track transition','pause/resume/reset','presentation auto-start and exit','silence override','upload volume/loop','single-copy JSON export/import','IndexedDB refresh, no autoplay','invalid/oversized upload rejection','1440/1024/768/390/360 modal bounds','no runtime errors']});

@@ -2,6 +2,7 @@ import {drawingFrame,type DrawingProject,type DrawingScene,type DrawingItem} fro
 import {drawAtmosphere} from './drawing-weather';
 import {actionPose,drawWalkingCutout} from './drawing-actions';
 import {renderDrawingSpeech,speechViewFor,type SpeechView,type SpeechActor} from './drawing-speech';
+import {sceneDialogueSeconds} from './film-narration';
 export const DRAW_WIDTH=1280,DRAW_HEIGHT=720;
 export type RasterCache=Map<string,HTMLImageElement>;
 function wrap(ctx:CanvasRenderingContext2D,text:string,width:number){const lines:string[]=[];let line='';for(const c of text){if(c==='\n'){lines.push(line);line='';continue;}if(ctx.measureText(line+c).width>width&&line){lines.push(line);line=c;}else line+=c;}if(line)lines.push(line);return lines;}
@@ -10,9 +11,10 @@ export function drawDrawingScene(ctx:CanvasRenderingContext2D,p:DrawingProject,s
  const bg=scene.backgroundAssetId?images.get(scene.backgroundAssetId):undefined;
  if(bg){const r=scene.backgroundFit==='cover'?Math.max(w/bg.naturalWidth,h/bg.naturalHeight):Math.min(w/bg.naturalWidth,h/bg.naturalHeight);const bw=bg.naturalWidth*r,bh=bg.naturalHeight*r;ctx.drawImage(bg,(w-bw)/2,(h-bh)/2,bw,bh);}
  const bubbles:SpeechActor[]=[];
+ const dialogueSeconds=sceneDialogueSeconds(p,scene);
  for(const item of scene.items){
   const a=p.assets.find(a=>a.id===item.assetId),image=images.get(item.assetId);if(!a||!image)continue;
-  const f=drawingFrame(item,seconds),iw=item.width/100*w,ih=iw*a.height/a.width,x=f.x/100*w,y=f.y/100*h,isPlant=a.kind==='plant';
+  const f=drawingFrame(item,seconds,dialogueSeconds),iw=item.width/100*w,ih=iw*a.height/a.width,x=f.x/100*w,y=f.y/100*h,isPlant=a.kind==='plant';
   const pose=actionPose(item,f.phase,f.progress);
   ctx.save();ctx.translate(x,y);ctx.rotate((isPlant?item.rotation:f.angle)*Math.PI/180);ctx.scale((item.flipped?-1:1)*pose.scaleX,pose.scaleY);
   if(isPlant&&(item.motion==='sway'||scene.weather==='wind')){

@@ -1,6 +1,6 @@
 import {drawingId,emptyDrawingProject,validateDrawingProject,DRAWING_MAX_SCENES,DRAWING_MAX_ASSETS,type DrawingProject,type DrawingVoice,type DrawingScene} from './drawing-project';
 import {activeNarration,monoSamples,wavBytes,audioDataUrl} from './film-narration';
-import {effectiveMusic,musicPlaybackKey} from './drawing-music';
+import {effectiveMusic,musicPlaybackKey,musicAssetBytes,MUSIC_TOTAL_LIMIT} from './drawing-music';
 import {movieTimeline} from './drawing-movie';
 
 export type GroupWork={id:string;name:string;project:DrawingProject;fingerprint?:string;sceneSubmission?:boolean};
@@ -54,6 +54,7 @@ export function assembleGroupProjects(works:GroupWork[],title:string,narrations:
  }
  next.activeSceneId=next.scenes[0].id;
  if(next.assets.length>DRAWING_MAX_ASSETS)throw new Error(`그림이 ${DRAWING_MAX_ASSETS}개를 넘어요. 각 작품에서 쓰지 않는 그림을 정리한 뒤 다시 모아 주세요.`);
+ if(musicAssetBytes(next.musicAssets!)>MUSIC_TOTAL_LIMIT)throw new Error(`합친 작품의 음악이 ${MUSIC_TOTAL_LIMIT/1_000_000}MB를 넘어요. 장면을 나눠서 합쳐 주세요.`);
  if(!validateDrawingProject(next))throw new Error('모은 작품의 그림·녹음 용량이 커요. 작품을 나눠서 모아 주세요. 기존 작업은 그대로예요.');
  return next;
 }

@@ -14,13 +14,25 @@ try{
  await fs.writeFile(path.join(nextFixture,'server.js'),'exports.after = callback => globalThis.playQaDeferred.push(callback);');
  globalThis.playQaDeferred=deferred;
  process.env.NEXT_PUBLIC_SUPABASE_URL='https://class.test';process.env.SUPABASE_SERVICE_ROLE_KEY='qa-private-secret';process.env.PLAY_SETTINGS_PIN='3035';
- const load=createRequire(path.join(temp,'entry.js')),server=load('./apps/play-studio/lib/play-class-server.js'),route=load('./apps/play-studio/app/api/play-class/route.js'),{emptyDrawingProject}=load('./apps/play-studio/lib/drawing-project.js');
+ const load=createRequire(path.join(temp,'entry.js')),server=load('./apps/play-studio/lib/play-class-server.js'),route=load('./apps/play-studio/app/api/play-class/route.js'),{emptyDrawingProject,newDrawingScene}=load('./apps/play-studio/lib/drawing-project.js');
+ const {submitSceneProject,sceneProjectUrl,readClassProject}=load('./apps/play-studio/lib/play-class-client.js');
+ const {submitSceneSnapshot}=load('./apps/play-studio/lib/play-scene-projection.js');
+ const {assembleGroupProjects}=load('./apps/play-studio/lib/group-project.js');
+ const {applyMusic,effectiveMusic}=load('./apps/play-studio/lib/drawing-music.js');
+ const {wavBytes}=load('./apps/play-studio/lib/film-narration.js');
  const id='10000000-0000-4000-8000-000000000001',room={id,code:'123456',title:'교실',group_count:2,is_open:true},groups=[1,2].map(n=>({class_id:id,group_no:n,revision:0,object_path:null,submitted:false}));
  let uploaded=JSON.stringify(emptyDrawingProject()),race=false,cleanup=0,otherSavedGroups=[];
  const sceneWorks=new Map();
  let sceneOrder=0,sceneCleanupReads=0;
  global.fetch=async(url,options={})=>{
-  url=String(url);const b=options.body?JSON.parse(options.body):{};
+  url=String(url);
+  if(options.method==='PUT'&&url.includes('/object/upload/sign/opaque')){
+   assert.equal(options.body.type,'application/json');
+   uploaded=await options.body.text();
+   return Response.json({ok:true});
+  }
+  const b=options.body?JSON.parse(options.body):{};
+  if(url==='/api/play-class')return call(b,b.action==='scene-work'?tc:sc);
   if(url.includes('/rpc/play_film_pin_attempt')||url.includes('/rpc/play_film_rate_limit'))return Response.json(true);
   if(url.includes('/rpc/play_create_class')){assert.match(b.p_code,/^\d{6}$/);return Response.json([room]);}
   if(url.includes('/rpc/play_save_group')){const g=groups[b.p_group-1];if(race||g.revision!==b.p_revision||!room.is_open)return Response.json([]);Object.assign(g,{revision:g.revision+1,object_path:b.p_path,summary:b.p_summary,submitted:b.p_submitted});return Response.json([g]);}
@@ -66,7 +78,7 @@ try{
   }
   if(url.includes('/rest/v1/play_class_uploads')){if(options.method==='DELETE')cleanup++;return Response.json([]);}
   if(url.includes('/object/upload/sign/'))return Response.json({url:'/object/upload/sign/opaque?token=short-lived'});
-  if(url.includes('/object/sign/'))return Response.json({signedURL:'/object/sign/opaque?token=short-lived'});
+  if(url.includes('/object/sign/'))return options.method==='POST'?Response.json({signedURL:'/object/sign/opaque?token=short-lived'}):new Response(uploaded);
   if(url.includes('/storage/v1/object/'))return new Response(uploaded, {headers:{'Content-Type':'application/json'}});
   throw new Error('Unexpected mocked URL: '+url);
  };
@@ -133,6 +145,28 @@ try{
  assert.equal((await call({action:'scene-work',submissionId:finished[0].id},tc)).status,404);
  assert.equal((await call({action:'scene-work',submissionId:slowFinish.id},tc)).status,404);
  assert.equal(groups[0].revision,0,'scene submissions do not write to the shared group');
+ const originalUpload=uploaded;
+ const music=wavBytes(new Float32Array(70*24000*2).fill(.15),24000,2);
+ assert(music.byteLength>3_000_000);
+ const track={id:'audio-large',name:'장면 1 배경음악.wav',source:`data:audio/wav;base64,${Buffer.from(music).toString('base64')}`,duration:70};
+ const classProject=emptyDrawingProject();
+ classProject.scenes.push(newDrawingScene('next-scene','장면 2'));
+ const withMusic=applyMusic(classProject,{trackId:track.id,volume:.35,loop:true},false,track);
+ const snapshot=await submitSceneSnapshot(withMusic,withMusic.activeSceneId);
+ const receiptWithMusic=await submitSceneProject(snapshot,{classId:id,group:1},1);
+ assert.equal(receiptWithMusic.isLatest,true);
+ const teacherScene=await readClassProject(await sceneProjectUrl(receiptWithMusic.id));
+ assert.deepEqual(teacherScene.musicAssets,[track],'larger audio reaches the teacher in the signed project');
+ assert.deepEqual(effectiveMusic(teacherScene,teacherScene.scenes[0]),withMusic.scenes[0].music);
+ const combined=assembleGroupProjects([
+  {id:receiptWithMusic.id,name:'장면1',project:teacherScene,sceneSubmission:true},
+  {id:'scene2',name:'장면2',project:await submitSceneSnapshot(withMusic,'next-scene'),sceneSubmission:true},
+ ],'두 장면');
+ assert.equal(combined.musicAssets[0].source,track.source);
+ assert.equal(combined.scenes[0].music.trackId,combined.musicAssets[0].id);
+ assert.equal(combined.scenes[1].music,null);
+ uploaded=originalUpload;
+ console.log('PASS: 6.7MB of scene music travels from the student to the teacher and stays linked in the combined movie.');
  const pending=await (await prepareScene(2)).json();
  const legacyPending=await (await prepareScene(3)).json();
  const {scene: ignoredScene, ...legacyClaim}=server.verify(legacyPending.ticket,'scene-upload');

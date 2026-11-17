@@ -30,7 +30,7 @@ export function useDrawingEditor(storageKey='active',initialProject=emptyDrawing
   const musicPlayer=useRef<DrawingMusicPlayer|null>(null),voicePlayer=useRef<VoicePlayer|null>(null);
   const session=useRef<VoiceSession|null>(null),storyTimer=useRef(0),storyOn=useRef(false),storyEpoch=useRef(0);
   useEffect(()=>()=>{musicPlayer.current?.dispose();voicePlayer.current?.dispose();session.current?.cancel();clearTimeout(storyTimer.current);},[]);
-  const clock=useRef(0),past=useRef<DrawingProject[]>([]),future=useRef<DrawingProject[]>([]);
+  const clock=useRef(0),audioClock=useRef<(()=>number)|null>(null),past=useRef<DrawingProject[]>([]),future=useRef<DrawingProject[]>([]);
   const drag=useRef<{id:string;pointerId:number;dx:number;dy:number;start:DrawingProject;moved:boolean}|null>(null);
   const scene=project.scenes.find(s=>s.id===project.activeSceneId)??project.scenes[0],selected=scene.items.find(i=>i.id===selectedId),selectedAsset=project.assets.find(a=>a.id===selected?.assetId);
   useEffect(()=>{let gone=false;void loadDrawing(storageKey).then(p=>{if(gone)return;if(p){savedProject.current=p;projectRef.current=p;setProject(p);}}).catch(cause=>{if(!gone){setBlocked(true);setSaveState('저장 확인 필요');setError(cause instanceof Error?cause.message:'저장 내용을 읽지 못했어요.');}}).finally(()=>{if(!gone)setLoaded(true);});return()=>{gone=true;};},[]);
@@ -64,9 +64,9 @@ export function useDrawingEditor(storageKey='active',initialProject=emptyDrawing
       flush();
     };
   },[loaded,blocked,storageKey]);
-  function pause(){if(storyOn.current){stop();return;}musicPlayer.current?.pause();setPlaying(false);}
+  function pause(){if(storyOn.current||audioClock.current){stop();return;}musicPlayer.current?.pause();setPlaying(false);}
   function start(){musicPlayer.current??=new DrawingMusicPlayer();musicPlayer.current.play(projectRef.current,projectRef.current.scenes.find(s=>s.id===projectRef.current.activeSceneId)!,setError);setDestination(false);setPlaying(true);}
-  function endStory(){storyOn.current=false;storyEpoch.current++;clearTimeout(storyTimer.current);voicePlayer.current?.stop();setVoicePlaying(false);setStoryPlaying(false);}
+  function endStory(){storyOn.current=false;storyEpoch.current++;clearTimeout(storyTimer.current);audioClock.current=null;voicePlayer.current?.stop();setVoicePlaying(false);setStoryPlaying(false);}
   function stop(){endStory();musicPlayer.current?.stop();setPlaying(false);clock.current=0;setReset(n=>n+1);}
   function setValue(p:DrawingProject){projectRef.current=p;setProject(p);}
   function commit(fn:(p:DrawingProject)=>DrawingProject){if(!loaded)return;const before=projectRef.current,candidate=fn(before);if(candidate===before)return;const next={...candidate,updatedAt:new Date().toISOString()};past.current=[...past.current.slice(-29),before];future.current=[];stop();setValue(next);}
@@ -99,7 +99,7 @@ export function useDrawingEditor(storageKey='active',initialProject=emptyDrawing
   function duplicate(){if(!selected||scene.items.length>=40)return;const id=drawingId('drawing');editScene({items:[...scene.items,{...selected,id,x:bounded(selected.x+5,5,95),target:selected.target?{...selected.target}:undefined}]});setSelectedId(id);}
   function layer(delta:-1|1){if(!selected)return;const items=[...scene.items],index=items.findIndex(i=>i.id===selected.id),to=bounded(index+delta,0,items.length-1);const [item]=items.splice(index,1);items.splice(to,0,item);editScene({items});}
   function addScene(copy=false){if(project.scenes.length>=DRAWING_MAX_SCENES)return;const id=drawingId('scene');const next=copy?{...structuredClone(scene),id,title:`장면 ${project.scenes.length+1}`,items:scene.items.map(i=>({...i,id:drawingId('drawing')}))}:newDrawingScene(id,`장면 ${project.scenes.length+1}`);commit(p=>({...p,activeSceneId:id,scenes:[...p.scenes,next]}));setSelectedId(undefined);setDestination(false);}
-  function switchScene(id:string){const wasStory=storyOn.current;if(wasStory)stop();const p=projectRef.current,s=p.scenes.find(s=>s.id===id);if(!s||id===p.activeSceneId)return;clock.current=0;setReset(n=>n+1);if(playing&&!wasStory)musicPlayer.current?.play(p,s,setError);else musicPlayer.current?.stop();setDestination(false);setSelectedId(undefined);setValue({...p,activeSceneId:id});}
+  function switchScene(id:string){const wasNarrated=storyOn.current||!!audioClock.current;if(wasNarrated)stop();const p=projectRef.current,s=p.scenes.find(s=>s.id===id);if(!s||id===p.activeSceneId)return;clock.current=0;setReset(n=>n+1);if(playing&&!wasNarrated)musicPlayer.current?.play(p,s,setError);else musicPlayer.current?.stop();setDestination(false);setSelectedId(undefined);setValue({...p,activeSceneId:id});}
   function deleteScene(sceneId=scene.id){const target=projectRef.current.scenes.find(s=>s.id===sceneId);if(!target||!confirm(`“${target.title}”을 지울까요? 그림과 녹음이 이 장면에서 빠져요.${projectRef.current.narration?.enabled?" 전체 녹음은 잠시 꺼지고 장면별 녹음을 사용해요.":""} 실행 취소로 되돌릴 수 있어요.`))return;commit(p=>deleteDrawingScene(p,sceneId));setSelectedId(undefined);setDestination(false);}
   function newWork(){if(!confirm('새 작품을 시작할까요? 지금 작품은 먼저 작품 파일로 보관해 주세요.'))return;setBlocked(false);setError('');commit(()=>({...initialProject(),id:drawingId('project')}));setSelectedId(undefined);setDestination(false);}
   function point(e:ReactPointerEvent<HTMLCanvasElement>){const r=e.currentTarget.getBoundingClientRect();return {x:bounded((e.clientX-r.left)/r.width*100,0,100),y:bounded((e.clientY-r.top)/r.height*100,0,100)};}
@@ -144,26 +144,36 @@ export function useDrawingEditor(storageKey='active',initialProject=emptyDrawing
   }
   function playVoice(){
     const voice=scene.voice;if(!voice)return;
-    stop();voicePlayer.current??=new VoicePlayer();setVoicePlaying(true);
-    voicePlayer.current.play(voice,message=>{setError(message);setVoicePlaying(false);},()=>setVoicePlaying(false));
+    stop();setError('');setDestination(false);setVoicePlaying(true);
+    const player=voicePlayer.current??=new VoicePlayer(),epoch=storyEpoch.current;
+    audioClock.current=()=>player.currentTime;
+    player.play(voice,message=>{if(storyEpoch.current===epoch){setError(message);stop();}},()=>{
+      if(storyEpoch.current===epoch)stop();
+    },()=>{
+      if(storyEpoch.current===epoch)setPlaying(true);
+    });
   }
-  function stopVoice(){voicePlayer.current?.stop();setVoicePlaying(false);}
+  function stopVoice(){stop();}
   function removeVoice(){if(!scene.voice||!confirm('이 장면에 담은 목소리를 지울까요? 실행 취소로 되돌릴 수 있어요.'))return;stopVoice();commit(p=>applyVoice(p,p.activeSceneId,null));}
   // Each scene runs for as long as its voice, then hands over to the next one.
   function runScene(index:number){
     if(!storyOn.current)return;
     const p=projectRef.current,next=p.scenes[index];
     if(!next){stop();return;}
+    audioClock.current=null;
     clock.current=0;setReset(n=>n+1);setValue({...p,activeSceneId:next.id});
     const voice=next.voice,epoch=storyEpoch.current;
     const current=()=>storyOn.current&&storyEpoch.current===epoch;
     const begin=()=>{if(!current())return;setPlaying(true);musicPlayer.current??=new DrawingMusicPlayer();musicPlayer.current.play({...p,activeSceneId:next.id},next,setError);};
     if(voice){
       setPlaying(false);setVoicePlaying(true);
-      voicePlayer.current??=new VoicePlayer();
+      const player=voicePlayer.current??=new VoicePlayer();
+      audioClock.current=()=>player.currentTime;
       // Wait for actual playback to end, including buffering, instead of cutting speech with a wall-clock timer.
-      voicePlayer.current.play(voice,message=>{if(current()){setError(message);stop();}},()=>{
+      player.play(voice,message=>{if(current()){setError(message);stop();}},()=>{
         if(!current())return;setVoicePlaying(false);
+        clock.current=voice.duration;audioClock.current=null;
+        setReset(n=>n+1);
         const hold=Math.max(0,sceneSeconds(next)-voice.duration);
         storyTimer.current=window.setTimeout(()=>{if(current())runScene(index+1);},hold*1000);
       },begin);
@@ -176,23 +186,30 @@ export function useDrawingEditor(storageKey='active',initialProject=emptyDrawing
     stop();setError('');setSelectedId(undefined);setDestination(false);
     storyOn.current=true;setStoryPlaying(true);
     const narration=activeNarration(projectRef.current);
-    if(!narration){setPlaying(true);runScene(0);return;}
+    if(!narration){runScene(0);return;}
     const plan=movieTimeline(projectRef.current),epoch=storyEpoch.current;let last=-1,endedAt:number|null=null;
-    voicePlayer.current??=new VoicePlayer();setVoicePlaying(true);
-    voicePlayer.current.play(narration,message=>{setError(message);stop();},()=>{endedAt=performance.now();setVoicePlaying(false);},()=>{
+    const player=voicePlayer.current??=new VoicePlayer();setVoicePlaying(true);
+    const time=()=>endedAt===null?player.currentTime:narration.duration+(performance.now()-endedAt)/1000;
+    player.play(narration,message=>{if(storyEpoch.current===epoch){setError(message);stop();}},()=>{if(storyEpoch.current===epoch){endedAt=performance.now();setVoicePlaying(false);}},()=>{
      if(!storyOn.current||storyEpoch.current!==epoch)return;
      setPlaying(true);
      const tick=()=>{
       if(!storyOn.current||storyEpoch.current!==epoch)return;
-      const time=endedAt===null?voicePlayer.current!.currentTime:narration.duration+(performance.now()-endedAt)/1000;
-      const index=plan.findIndex(s=>time<s.at+s.seconds);
+      const seconds=time(),index=plan.findIndex(s=>seconds<s.at+s.seconds);
       if(index<0){stop();return;}
-      if(index!==last){last=index;const p=projectRef.current,step=plan[index];clock.current=Math.max(0,time-step.at);setReset(n=>n+1);setValue({...p,activeSceneId:step.scene.id});musicPlayer.current??=new DrawingMusicPlayer();musicPlayer.current.play(p,step.scene,setError);}
+      if(index!==last){
+       last=index;
+       const p=projectRef.current,step=plan[index];
+       audioClock.current=()=>Math.max(0,Math.min(step.seconds,time()-step.at));
+       clock.current=audioClock.current();
+       setReset(n=>n+1);setValue({...p,activeSceneId:step.scene.id});
+       musicPlayer.current??=new DrawingMusicPlayer();musicPlayer.current.play(p,step.scene,setError);
+      }
       storyTimer.current=window.setTimeout(tick,40);
      };tick();
     });
   }
   async function png(){setBusy(true);try{const snapshot=projectRef.current,current=snapshot.scenes.find(s=>s.id===snapshot.activeSceneId)!;const images=await loadDrawingImages(snapshot.assets);await document.fonts.ready;const c=document.createElement('canvas');c.width=2560;c.height=1440;const ctx=c.getContext('2d');if(!ctx)throw new Error('이미지를 만들지 못했어요.');ctx.scale(2,2);drawDrawingScene(ctx,snapshot,current,images,clock.current);const blob=await new Promise<Blob>((resolve,reject)=>c.toBlob(b=>b?resolve(b):reject(new Error('저장에 실패했어요.')),'image/png'));downloadBlob(blob,`${fileName(snapshot.title)}-${fileName(current.title)}.png`);}catch(cause){setError(cause instanceof Error?cause.message:'이미지를 만들지 못했어요.');}finally{setBusy(false);}}
   return {recording,recordSeconds,startVoice,finishVoice,playVoice,stopVoice,removeVoice,voicePlaying,storyPlaying,playStory,maxVoiceSeconds:VOICE_MAX_SECONDS,
-    project,scene,selected,selectedAsset,selectedId,playing,start,pause,reset,clock,destination,setDestination,loaded,blocked,saveState,error,setError,busy,commit,stop,editScene,patchItem,undo,redo,canUndo:past.current.length>0,canRedo:future.current.length>0,place,chooseItem,remove,removeAsset,removeBackground,rotateScene,duplicate,layer,addScene,switchScene,deleteScene,newWork,down,move,up,cancel,importWork,backup,png};
+    project,scene,selected,selectedAsset,selectedId,playing,start,pause,reset,clock,audioClock,destination,setDestination,loaded,blocked,saveState,error,setError,busy,commit,stop,editScene,patchItem,undo,redo,canUndo:past.current.length>0,canRedo:future.current.length>0,place,chooseItem,remove,removeAsset,removeBackground,rotateScene,duplicate,layer,addScene,switchScene,deleteScene,newWork,down,move,up,cancel,importWork,backup,png};
 }

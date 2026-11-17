@@ -83,6 +83,27 @@ try{
  assert(drawingFrame(running,2).progress>drawingFrame(walking,2).progress,'running also travels faster');
  assert.notEqual(actionPose({...baseActor,motion:'dance',target:undefined},.5,0).scaleY,1,'dance changes the pose in place');
  console.log('PASS: old/new motion backups, alternating feet, continuous non-folding deformation, neutral start/end poses, faster running and looping dance.');
+ const {savedSceneSnapshot}=local('./apps/play-studio/lib/play-scene-projection.js');
+ const {drawDrawingScene}=local('./apps/play-studio/lib/drawing-renderer.js');
+ const {sceneDialogueSeconds}=local('./apps/play-studio/lib/film-narration.js');
+ const talking={...walking,motion:'move',speech:''};
+ const oldSubmission=JSON.stringify({...prepared,scenes:[{...prepared.scenes[0],weather:'none',items:[talking]},...prepared.scenes.slice(1)]});
+ const shown=await savedSceneSnapshot(parseDrawingFile(oldSubmission),1);
+ const positions=[];
+ const canvas={clearRect(){},fillRect(){},save(){},restore(){},rotate(){},scale(){},drawImage(){},translate(x){positions.push(x/1280*100);}};
+ const images=new Map([[talking.assetId,{naturalWidth:1,naturalHeight:1}]]);
+ for(const t of [0,8,16,24,32])drawDrawingScene(canvas,shown,shown.scenes[0],images,t);
+ assert.equal(positions.length,5);
+ for(const [index,expected] of [50,57.5,65,72.5,80].entries()){
+  assert(Math.abs(positions[index]-expected)<1e-6,'old submitted drawing moves until the 32-second dialogue ends');
+ }
+ assert.equal(drawingFrame(talking,5).x,80,'preview without dialogue uses the selected speed');
+ const still={...talking,motion:'still'};assert.equal(drawingFrame(still,16,32).x,still.x);
+ const continuous=addNarration(prepared,{...voice,duration:12});
+ continuous.narration.durations=Object.fromEntries(continuous.scenes.map((scene,index)=>[scene.id,[6,5,2,4][index]]));
+ assert.deepEqual(continuous.scenes.map(scene=>sceneDialogueSeconds(continuous,scene)),[6,5,1,0]);
+ assert.equal(parseDrawingFile(oldSubmission).scenes[0].items[0].x,50,'stored coordinates are unchanged');
+ console.log('PASS: old teacher submissions animate continuously through dialogue, arrive on its final frame and respect silent or stationary scenes.');
  const {removeDrawingAsset,removeSceneBackground}=local('./apps/play-studio/lib/drawing-removal.js');
  const resultAsset={...character,id:'generated-background',kind:'background'},original={...character,id:'original-background',kind:'background'};
  const withShared={...extended,assets:[...extended.assets,resultAsset,original],scenes:extended.scenes.map((scene,i)=>({...scene,backgroundAssetId:i===0?resultAsset.id:scene.backgroundAssetId,stillOriginalAssetId:i===0?original.id:scene.stillOriginalAssetId,protectedMask:i===0?raster:scene.protectedMask,items:[...scene.items,{...legacy.scenes[0].items[0],id:'shared-'+i}]}))};

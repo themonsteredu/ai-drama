@@ -213,7 +213,7 @@ export type MovieResult={blob:Blob;extension:string;seconds:number;lostVoices:nu
  * Plays the whole story once onto an off-screen canvas and records what plays.
  * Capture is real time — a MediaRecorder cannot run faster than the story does.
  */
-export async function recordMovie(project:DrawingProject,images:RasterCache,onProgress:MovieProgress,canceled:()=>boolean):Promise<MovieResult>{
+export async function recordMovie(project:DrawingProject,onProgress:MovieProgress,canceled:()=>boolean):Promise<MovieResult>{
  const mimeType=movieMimeType();
  if(!movieSupported()||!mimeType)throw new Error('이 기기에서는 영상 파일을 만들 수 없어요. 아래 「화면 녹화로 만들기」를 눌러 주세요.');
  const total=movieSeconds(project),plan=movieTimeline(project);
@@ -227,10 +227,11 @@ export async function recordMovie(project:DrawingProject,images:RasterCache,onPr
  const captureTracks:MediaStreamTrack[]=[];
  const cleanup=()=>{sources.forEach(s=>{try{s.stop();}catch{}});captureTracks.forEach(track=>track.stop());void context.close().catch(()=>{});};
  try{
-  await context.resume().catch(()=>{});
-  onProgress(0,'소리를 준비하고 있어요…');
+  // Resume in the button's activation, before preparing the images or audio.
+  await context.resume();
+  onProgress(0,'그림과 소리를 준비하고 있어요…');
   // Decode every track once up front: a stall mid-capture would be recorded as silence.
-  const audio=await movieTracks(project,plan,context);
+  const [images,audio]=await Promise.all([loadDrawingImages(project.assets),movieTracks(project,plan,context)]);
   if(canceled())throw new Error('영상 만들기를 그만두었어요.');
 
   const destination=context.createMediaStreamDestination();

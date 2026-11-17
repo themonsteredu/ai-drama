@@ -1,4 +1,4 @@
-import type {DrawingProject,DrawingNarration,DrawingVoice,DialogueLine,DialogueSpeaker} from '../../../packages/stage-core/src/drawing';
+import type {DrawingProject,DrawingScene,DrawingNarration,DrawingVoice,DialogueLine,DialogueSpeaker} from '../../../packages/stage-core/src/drawing';
 export const NARRATION_MAX_SECONDS=600;
 export const MAX_DIALOGUE_SPEAKERS=30;
 export const AI_VOICES=[{id:'coral',label:'코럴'},{id:'cedar',label:'시더'},{id:'marin',label:'마린'},{id:'ash',label:'애쉬'},{id:'sage',label:'세이지'},{id:'shimmer',label:'쉬머'},{id:'alloy',label:'알로이'},{id:'ballad',label:'발라드'},{id:'echo',label:'에코'},{id:'verse',label:'버스'}];
@@ -52,6 +52,18 @@ export function narrationDurations(p:DrawingProject){
  values[values.length-1]=Math.max(values.at(-1)!,voice.duration-before);
  return values;
 }
+export function sceneDialogueSeconds(p:DrawingProject,scene:DrawingScene){
+ const voice=activeNarration(p);
+ if(!voice)return scene.voice?.duration??0;
+ const durations=narrationDurations(p)!;
+ let start=0;
+ for(const [index,candidate] of p.scenes.entries()){
+  const duration=durations[index];
+  if(candidate.id===scene.id)return Math.max(0,Math.min(duration,voice.duration-start));
+  start+=duration;
+ }
+ return 0;
+}
 export function setNarrationBoundary(p:DrawingProject,index:number,time:number):DrawingProject{
  const values=narrationDurations(p);if(!values||!p.narration||index<1||index>=values.length)throw new Error('전환할 다음 장면을 선택해 주세요.');
  const start=values.slice(0,index-1).reduce((n,x)=>n+x,0),end=start+values[index-1]+values[index];
@@ -59,14 +71,14 @@ export function setNarrationBoundary(p:DrawingProject,index:number,time:number):
  values[index-1]=time-start;values[index]=end-time;
  return {...p,narration:{...p.narration,durations:Object.fromEntries(p.scenes.map((s,i)=>[s.id,values[i]]))}};
 }
-export function wavBytes(samples:Float32Array,rate=16000){
+export function wavBytes(samples:Float32Array,rate=16000,channels=1){
  const bytes=new Uint8Array(44+samples.length*2),view=new DataView(bytes.buffer);
  const text=(at:number,v:string)=>{for(let i=0;i<v.length;i++)bytes[at+i]=v.charCodeAt(i);};
- text(0,'RIFF');view.setUint32(4,bytes.length-8,true);text(8,'WAVE');text(12,'fmt ');view.setUint32(16,16,true);view.setUint16(20,1,true);view.setUint16(22,1,true);view.setUint32(24,rate,true);view.setUint32(28,rate*2,true);view.setUint16(32,2,true);view.setUint16(34,16,true);text(36,'data');view.setUint32(40,samples.length*2,true);
+ text(0,'RIFF');view.setUint32(4,bytes.length-8,true);text(8,'WAVE');text(12,'fmt ');view.setUint32(16,16,true);view.setUint16(20,1,true);view.setUint16(22,channels,true);view.setUint32(24,rate,true);view.setUint32(28,rate*channels*2,true);view.setUint16(32,channels*2,true);view.setUint16(34,16,true);text(36,'data');view.setUint32(40,samples.length*2,true);
  for(let i=0;i<samples.length;i++)view.setInt16(44+i*2,Math.max(-1,Math.min(1,samples[i]))*(samples[i]<0?32768:32767),true);
  return bytes;
 }
-export async function audioDataUrl(blob:Blob){return new Promise<string>((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(String(r.result));r.onerror=()=>reject(new Error('녹음 파일을 읽지 못했어요.'));r.readAsDataURL(blob);});}
+export async function audioDataUrl(blob:Blob,errorMessage='녹음 파일을 읽지 못했어요.'){return new Promise<string>((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(String(r.result));r.onerror=()=>reject(new Error(errorMessage));r.readAsDataURL(blob);});}
 export function monoSamples(buffer:AudioBuffer,rate=16000){
  const length=Math.ceil(buffer.duration*rate),out=new Float32Array(length);
  for(let c=0;c<buffer.numberOfChannels;c++){const data=buffer.getChannelData(c);for(let i=0;i<length;i++){const at=i*buffer.sampleRate/rate,a=Math.floor(at),fraction=at-a;out[i]+=((data[a]??0)*(1-fraction)+(data[a+1]??data[a]??0)*fraction)/buffer.numberOfChannels;}}

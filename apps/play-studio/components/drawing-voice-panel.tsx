@@ -28,7 +28,7 @@ export function DrawingVoicePanel({e,onFullNarration}:{e:ReturnType<typeof useDr
   <div className="draw-voice-main-actions">
    <button type="button" className="draw-voice-upload" disabled={disabled||e.recording} onClick={()=>file.current?.click()}>{uploading?'대사 여는 중…':voice?'이 장면 녹음 바꾸기':'이 장면 녹음 올리기'}</button>
    <input ref={file} hidden type="file" aria-label="녹음한 대사 파일" accept=".mp3,.m4a,.mp4,.wav,.aac,.ogg,.webm,audio/*" onChange={event=>{const value=event.target.files?.[0];event.target.value='';if(value)void upload(value);}}/>
-   {voice?<><button type="button" disabled={disabled||e.recording} aria-label={e.voicePlaying?'이 장면 대사 멈추기':'이 장면 대사 듣기'} onClick={()=>e.voicePlaying?e.stopVoice():e.playVoice()}>{e.voicePlaying?'대사 멈춤':'대사 듣기'}</button><button type="button" disabled={disabled||e.recording} aria-label="이 장면 녹음 지우기" onClick={e.removeVoice}>녹음 삭제</button></>:null}
+   {voice?<><button type="button" disabled={e.storyPlaying||e.recording||(disabled&&!e.voicePlaying)} aria-label={e.voicePlaying?'이 장면 대사 멈추기':'이 장면 대사 듣기'} onClick={()=>e.voicePlaying?e.stopVoice():e.playVoice()}>{e.voicePlaying?'대사 멈춤':'대사 듣기'}</button><button type="button" disabled={disabled||e.recording} aria-label="이 장면 녹음 지우기" onClick={e.removeVoice}>녹음 삭제</button></>:null}
    {usable?<button type="button" className={e.recording?'recording':''} disabled={disabled&&!e.recording} onClick={()=>void(e.recording?e.finishVoice():e.startVoice())}>{e.recording?`녹음 완료 · ${seconds(e.recordSeconds)}`:'직접 녹음'}</button>:null}
   </div>
   <div className="draw-voice-timing">
