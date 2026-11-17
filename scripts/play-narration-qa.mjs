@@ -40,6 +40,13 @@ try{
  assert.equal(parseDrawingFile(JSON.stringify(splitProject)).scenes[0].items[0].separation.mask,tiny);
  assert.equal(JSON.parse(snapshot).scenes[0].items[0].assetId,savedActor.assetId,'old snapshots remain independent');
  console.log('PASS: twenty repeated cutout corrections keep one actor, original source/mask, motion/dialogue, bounded assets and backup persistence.');
+ const kept=applySeparatedCharacter(cleanStart,repair.scenes[0].id,tiny,null,'주인공',cutFixture).project,keptScene=kept.scenes[0];
+ assert.equal(keptScene.backgroundAssetId,cleanStart.scenes[0].backgroundAssetId,'keep mode leaves the original picture as the background');
+ assert.equal(keptScene.items.length,1);assert(!kept.assets.some(a=>a.id.startsWith('scene-clean-')),'keep mode stores no erased background');
+ const restored=applySeparatedCharacter(splitProject,repair.scenes[0].id,tiny,null,'주인공',cutFixture,savedActor.id).project;
+ assert.equal(restored.scenes[0].backgroundAssetId,savedActor.separation.sourceAssetId,'correcting an erased actor in keep mode restores the original picture');
+ assert.equal(restored.scenes[0].items.length,1);assert(validateDrawingProject(kept)&&validateDrawingProject(restored));
+ console.log('PASS: keep-background separation leaves the original picture untouched and restores it for earlier erased actors.');
 
  let p=emptyFourSceneProject();p.scenes[0].voice={id:'voice-old',source:'data:audio/wav;base64,UklGRg==',duration:100};
  p=addNarration(p,{id:'voice-full',source:'data:audio/wav;base64,UklGRg==',duration:120});

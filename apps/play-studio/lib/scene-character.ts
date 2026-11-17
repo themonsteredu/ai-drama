@@ -68,21 +68,23 @@ export function actorPlacement(scene:DrawingScene,cut:{left:number;top:number;wi
  return {x,y,width};
 }
 
-export function applySeparatedCharacter(project:DrawingProject,sceneId:string,selection:string,background:string,name:string,cut:{source:string;width:number;height:number;left:number;top:number;fullWidth:number;fullHeight:number},existingItemId?:string){
+/** background=null keeps the original picture as the stage background (nothing is erased). */
+export function applySeparatedCharacter(project:DrawingProject,sceneId:string,selection:string,background:string|null,name:string,cut:{source:string;width:number;height:number;left:number;top:number;fullWidth:number;fullHeight:number},existingItemId?:string){
  const scene=project.scenes.find(s=>s.id===sceneId),existing=scene?.items.find(i=>i.id===existingItemId),original=project.assets.find(a=>a.id===(existing?.separation?.sourceAssetId??scene?.backgroundAssetId));
  if(!scene||!original)throw new Error('장면 그림을 먼저 올려 주세요.');
  if(existingItemId&&!existing?.separation)throw new Error('고칠 주인공을 다시 선택해 주세요.');
  const actorId=drawingId('scene-actor'),backgroundId=drawingId('scene-clean'),oldAsset=project.assets.find(a=>a.id===existing?.assetId);
  const item:DrawingItem={id:drawingId('drawing'),...actorPlacement(scene,cut),rotation:0,flipped:false,motion:'still',speed:'normal',speech:'',...existing,assetId:actorId,separation:{sourceAssetId:original.id,mask:selection},...(existing&&oldAsset?{width:bounded(existing.width*cut.width/oldAsset.width,.1,100)}:{})};
- const assets=[...project.assets,{id:actorId,name:name.trim().slice(0,40)||'주인공',kind:'person' as const,source:cut.source,width:cut.width,height:cut.height},{id:backgroundId,name:`${scene.title} 빈 배경`.slice(0,40),kind:'background' as const,source:background,width:cut.fullWidth,height:cut.fullHeight}];
- const scenes=project.scenes.map(s=>s.id!==sceneId?s:{...s,backgroundAssetId:backgroundId,stillOriginalAssetId:backgroundId,protectedMask:undefined,items:existing?s.items.map(i=>i.id===existing.id?item:i):[...s.items,item]});
+ const stageBackgroundId=background===null?original.id:backgroundId;
+ const assets=[...project.assets,{id:actorId,name:name.trim().slice(0,40)||'주인공',kind:'person' as const,source:cut.source,width:cut.width,height:cut.height},...(background===null?[]:[{id:backgroundId,name:`${scene.title} 빈 배경`.slice(0,40),kind:'background' as const,source:background,width:cut.fullWidth,height:cut.fullHeight}])];
+ const scenes=project.scenes.map(s=>s.id!==sceneId?s:{...s,backgroundAssetId:stageBackgroundId,stillOriginalAssetId:stageBackgroundId,protectedMask:undefined,items:existing?s.items.map(i=>i.id===existing.id?item:i):[...s.items,item]});
  const used=new Set(scenes.flatMap(s=>[s.backgroundAssetId,s.stillOriginalAssetId,...s.items.flatMap(i=>[i.assetId,i.separation?.sourceAssetId])]));
  const next={...project,assets:assets.filter(a=>used.has(a.id)||!/^scene-(actor|clean)-/.test(a.id)),scenes};
  if(!validateDrawingProject(next))throw new Error('작품 보관 용량이 부족해요. 원본은 그대로 보관했어요.');
  return {project:next,itemId:item.id};
 }
 
-export async function separateSceneCharacter(project:DrawingProject,sceneId:string,selection:string,background:string,name:string,existingItemId?:string){
+export async function separateSceneCharacter(project:DrawingProject,sceneId:string,selection:string,background:string|null,name:string,existingItemId?:string){
  const scene=project.scenes.find(s=>s.id===sceneId),existing=scene?.items.find(i=>i.id===existingItemId),source=project.assets.find(a=>a.id===(existing?.separation?.sourceAssetId??scene?.backgroundAssetId));
  if(!source)throw new Error('장면 그림을 먼저 올려 주세요.');
  return applySeparatedCharacter(project,sceneId,selection,background,name,await cutSceneCharacter(source.source,selection),existingItemId);
