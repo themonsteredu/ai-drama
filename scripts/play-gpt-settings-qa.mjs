@@ -70,6 +70,8 @@ try{
  for(const code of ['credit_balance_exhausted','project_spend_limit_exceeded','insufficient_quota']){providerCode=code;const quota=await images.POST(req({image:source,mask:source,prompt:'숲'},cookie));assert.equal(quota.status,402);assert(!(await quota.json()).retryable,'billing errors are never retried');}
  console.log('PASS: shared-IP classrooms, valid PIN login, per-session limits, shared admission pacing, safe rate-limit retry, no quota replay.');
  providerStatus=401;const failed=await settings.POST(req({action:'test'},cookie));assert.equal(failed.status,400);assert(!(await failed.text()).includes('never expose'));
- assert.equal((await settings.POST(req({action:'logout'},cookie))).headers.get('set-cookie').includes('Max-Age=0'),true);
+ const logout=await settings.POST(req({action:'logout'},cookie));
+ assert.deepEqual(logout.headers.getSetCookie().map(value=>value.split(';')[0]),['moakit-play-settings=','moakit-play-teacher=']);
+ assert(logout.headers.getSetCookie().every(value=>value.includes('Max-Age=0')));
  console.log('PASS: PIN protection, signed sessions, CSRF, encrypted persistence, cross-device settings, no secret in responses, rate limits, model lookup and one-image low-quality OpenAI edit. All external requests mocked; no real key or paid generation.');
 }finally{global.fetch=originalFetch;for(const key of Object.keys(process.env))if(!(key in env))delete process.env[key];Object.assign(process.env,env);await fs.rm(temp,{recursive:true,force:true});}

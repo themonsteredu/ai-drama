@@ -2,7 +2,10 @@ import {createCipheriv,createDecipheriv,createHash,createHmac,hkdfSync,randomByt
 
 export const IMAGE_MODEL='gpt-image-2.5-flare';
 export const SESSION_COOKIE='moakit-play-settings';
-const SESSION_SECONDS=1800;
+const sessionScopes={
+ settings:{name:SESSION_COOKIE,seconds:30*60,prefix:''},
+ teacher:{name:'moakit-play-teacher',seconds:8*60*60,prefix:'classroom-teacher:'},
+} as const;
 export class SettingsError extends Error {
  constructor(message:string,public status=400,public retryAfter=0){super(message);}
 }
@@ -13,16 +16,25 @@ export function ready(){return !!process.env.NEXT_PUBLIC_SUPABASE_URL&&!!process
 function serverSecret(){const key=process.env.SUPABASE_SERVICE_ROLE_KEY;if(!key)throw new SettingsError('설정 저장소에 연결하지 못했어요.',503);return key;}
 function mac(value:string){return createHmac('sha256',serverSecret()).update(`moakit-play:${value}`).digest('base64url');}
 function equal(a:string,b:string){return timingSafeEqual(createHash('sha256').update(a).digest(),createHash('sha256').update(b).digest());}
-export function sessionCookie(clear=false){
- const data=`${Date.now()+SESSION_SECONDS*1000}.${randomBytes(16).toString('hex')}`;
- return `${SESSION_COOKIE}=${clear?'':`${data}.${mac(data)}`}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${clear?0:SESSION_SECONDS}${process.env.NODE_ENV==='production'?'; Secure':''}`;
+export function sessionCookie(clear=false,scope:keyof typeof sessionScopes='settings'){
+ const {name,seconds,prefix}=sessionScopes[scope];
+ const data=`${Date.now()+seconds*1000}.${randomBytes(16).toString('hex')}`;
+ const value=clear?'':`${data}.${mac(prefix+data)}`;
+ return `${name}=${value}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${clear?0:seconds}${process.env.NODE_ENV==='production'?'; Secure':''}`;
 }
-export function authenticated(request:Request){
+export function replyWithClassroomSession(value:unknown,clear=false){
+ const response=reply(value,200,{'Set-Cookie':sessionCookie(clear)});
+ response.headers.append('Set-Cookie',sessionCookie(clear,'teacher'));
+ return response;
+}
+export function authenticated(request:Request,scope:keyof typeof sessionScopes='settings'){
  if(!ready())return false;
- const value=request.headers.get('cookie')?.split(';').map(s=>s.trim()).find(s=>s.startsWith(`${SESSION_COOKIE}=`))?.slice(SESSION_COOKIE.length+1);
+ const {name,seconds,prefix}=sessionScopes[scope];
+ const value=request.headers.get('cookie')?.split(';').map(s=>s.trim()).find(s=>s.startsWith(`${name}=`))?.slice(name.length+1);
  if(!value)return false;
  const [expires,nonce,signature,...extra]=value.split('.');
- return extra.length===0&&!!signature&&Number(expires)>Date.now()&&Number(expires)<=Date.now()+SESSION_SECONDS*1000&&equal(signature,mac(`${expires}.${nonce}`));
+ const now=Date.now(),expiry=Number(expires);
+ return extra.length===0&&!!signature&&expiry>now&&expiry<=now+seconds*1000&&equal(signature,mac(`${prefix}${expires}.${nonce}`));
 }
 export function sameOrigin(request:Request){
  if(request.headers.get('origin')!==new URL(request.url).origin)throw new SettingsError('PLAY 화면에서 다시 요청해 주세요.',403);
