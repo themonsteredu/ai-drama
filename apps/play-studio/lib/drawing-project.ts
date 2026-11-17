@@ -46,6 +46,7 @@ export function validateDrawingProject(v:unknown):v is DrawingProject{
   const assets=new Set(v.assets.map(a=>a.id));
   for(const scene of v.scenes)if(record(scene)&&Array.isArray(scene.items))for(const item of scene.items)if(record(item)&&item.separation!==undefined){
     const cut=item.separation;if(!record(cut)||!assets.has(cut.sourceAssetId)||!validRasterSource(cut.mask)||!cut.mask.startsWith('data:image/png;'))return false;
+    if(cut.keepsBackground!==undefined&&cut.keepsBackground!==true)return false;
     bytes+=cut.mask.length;if(bytes>DRAWING_ASSET_BYTES)return false;
   }
   if(!v.scenes.some(s=>record(s)&&s.id===v.activeSceneId))return false;

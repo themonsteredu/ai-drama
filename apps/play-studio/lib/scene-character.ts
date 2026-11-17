@@ -69,6 +69,7 @@ export function actorPlacement(scene:DrawingScene,cut:{left:number;top:number;wi
 }
 
 type CutBox={left:number;top:number;width:number;height:number;fullWidth:number;fullHeight:number};
+type SeparationBackground={mode:'keep';source?:string}|{mode:'erase';source:string};
 
 /** Move a corrected actor by the change of its cut box, so it stays over its own photo pixels. */
 function correctedPlacement(scene:DrawingScene,existing:DrawingItem,oldWidth:number,cut:CutBox,previous?:CutBox){
@@ -79,25 +80,36 @@ function correctedPlacement(scene:DrawingScene,existing:DrawingItem,oldWidth:num
   ...(existing.target?{target:{x:bounded(existing.target.x+dx,0,100),y:bounded(existing.target.y+dy,0,100)}}:{})};
 }
 
-/**
- * background=null leaves the stage background exactly as it is (nothing is erased);
- * a string becomes the scene's new background.
- */
-export function applySeparatedCharacter(project:DrawingProject,sceneId:string,selection:string,background:string|null,name:string,cut:{source:string}&CutBox,existingItemId?:string,previous?:CutBox){
+export function applySeparatedCharacter(project:DrawingProject,sceneId:string,selection:string,background:SeparationBackground,name:string,cut:{source:string}&CutBox,existingItemId?:string,previous?:CutBox){
  const scene=project.scenes.find(s=>s.id===sceneId),existing=scene?.items.find(i=>i.id===existingItemId),original=project.assets.find(a=>a.id===(existing?.separation?.sourceAssetId??scene?.backgroundAssetId));
  if(!scene||!original)throw new Error('장면 그림을 먼저 올려 주세요.');
  if(existingItemId&&!existing?.separation)throw new Error('고칠 주인공을 다시 선택해 주세요.');
- const actorId=drawingId('scene-actor'),backgroundId=drawingId('scene-clean'),oldAsset=project.assets.find(a=>a.id===existing?.assetId);
- const item:DrawingItem={id:drawingId('drawing'),...actorPlacement(scene,cut),rotation:0,flipped:false,motion:'still',speed:'normal',speech:'',...existing,assetId:actorId,separation:{sourceAssetId:original.id,mask:selection},...(existing&&oldAsset?correctedPlacement(scene,existing,oldAsset.width,cut,previous):{})};
- const assets=[...project.assets,{id:actorId,name:name.trim().slice(0,40)||'주인공',kind:'person' as const,source:cut.source,width:cut.width,height:cut.height},...(background===null?[]:[{id:backgroundId,name:`${scene.title} 빈 배경`.slice(0,40),kind:'background' as const,source:background,width:cut.fullWidth,height:cut.fullHeight}])];
- const scenes=project.scenes.map(s=>s.id!==sceneId?s:{...s,...(background===null?{}:{backgroundAssetId:backgroundId,stillOriginalAssetId:backgroundId,protectedMask:undefined}),items:existing?s.items.map(i=>i.id===existing.id?item:i):[...s.items,item]});
+ const actorId=drawingId('scene-actor'),oldAsset=project.assets.find(a=>a.id===existing?.assetId);
+ const separation:DrawingItem['separation']={sourceAssetId:original.id,mask:selection};
+ if(background.mode==='keep')separation.keepsBackground=true;
+ const item:DrawingItem={id:drawingId('drawing'),...actorPlacement(scene,cut),rotation:0,flipped:false,motion:'still',speed:'normal',speech:'',...existing,assetId:actorId,separation,...(existing&&oldAsset?correctedPlacement(scene,existing,oldAsset.width,cut,previous):{})};
+ const assets=[...project.assets,{id:actorId,name:name.trim().slice(0,40)||'주인공',kind:'person' as const,source:cut.source,width:cut.width,height:cut.height}];
+ const updatedScene={...scene,items:existing?scene.items.map(i=>i.id===existing.id?item:i):[...scene.items,item]};
+ if(background.source){
+  const id=drawingId('scene-clean');
+  const label=background.mode==='erase'?'빈 배경':'복원한 배경';
+  assets.push({id,name:`${scene.title} ${label}`.slice(0,40),kind:'background',source:background.source,width:cut.fullWidth,height:cut.fullHeight});
+  updatedScene.backgroundAssetId=id;
+  if(background.mode==='erase'){
+   updatedScene.stillOriginalAssetId=id;
+   updatedScene.protectedMask=undefined;
+  }else if(scene.stillOriginalAssetId===scene.backgroundAssetId){
+   updatedScene.stillOriginalAssetId=id;
+  }
+ }
+ const scenes=project.scenes.map(s=>s.id===sceneId?updatedScene:s);
  const used=new Set(scenes.flatMap(s=>[s.backgroundAssetId,s.stillOriginalAssetId,...s.items.flatMap(i=>[i.assetId,i.separation?.sourceAssetId])]));
  const next={...project,assets:assets.filter(a=>used.has(a.id)||!/^scene-(actor|clean)-/.test(a.id)),scenes};
  if(!validateDrawingProject(next))throw new Error('작품 보관 용량이 부족해요. 원본은 그대로 보관했어요.');
  return {project:next,itemId:item.id};
 }
 
-export async function separateSceneCharacter(project:DrawingProject,sceneId:string,selection:string,background:string|null,name:string,existingItemId?:string){
+export async function separateSceneCharacter(project:DrawingProject,sceneId:string,selection:string,background:SeparationBackground,name:string,existingItemId?:string){
  const scene=project.scenes.find(s=>s.id===sceneId),existing=scene?.items.find(i=>i.id===existingItemId),source=project.assets.find(a=>a.id===(existing?.separation?.sourceAssetId??scene?.backgroundAssetId));
  if(!source)throw new Error('장면 그림을 먼저 올려 주세요.');
  const [cut,previous]=await Promise.all([cutSceneCharacter(source.source,selection),existing?.separation?cutSceneCharacter(source.source,existing.separation.mask).catch(()=>undefined):undefined]);
@@ -110,7 +122,7 @@ export async function restoreCharacterSelection(current:string,original:string,s
  const canvas=document.createElement('canvas');canvas.width=source.naturalWidth;canvas.height=source.naturalHeight;
  const ctx=canvas.getContext('2d',{willReadFrequently:true})!;ctx.drawImage(mask,0,0,canvas.width,canvas.height);
  const selected=characterRemovalMask(ctx.getImageData(0,0,canvas.width,canvas.height).data,canvas.width,canvas.height,Math.max(2,Math.round(Math.max(canvas.width,canvas.height)/256)));
- ctx.drawImage(source,0,0);const pixels=ctx.getImageData(0,0,canvas.width,canvas.height);
+ ctx.clearRect(0,0,canvas.width,canvas.height);ctx.drawImage(source,0,0);const pixels=ctx.getImageData(0,0,canvas.width,canvas.height);
  ctx.clearRect(0,0,canvas.width,canvas.height);ctx.drawImage(base,0,0,canvas.width,canvas.height);const output=ctx.getImageData(0,0,canvas.width,canvas.height);
  for(let i=0;i<selected.length;i++)if(selected[i])for(let c=0;c<4;c++)output.data[i*4+c]=pixels.data[i*4+c];
  ctx.putImageData(output,0,0);return canvas.toDataURL('image/png');

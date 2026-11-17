@@ -9,7 +9,7 @@ export interface DrawingEdit { version: 1; original: string; mask: string; width
 export interface DrawingAsset { id: string; name: string; kind: DrawingKind; source: string; width: number; height: number; edit?: DrawingEdit; }
 export interface DrawingItem {
   /** Original scene and selection let a child correct this cutout without adding a copy. */
-  separation?: {sourceAssetId:string;mask:string};
+  separation?: {sourceAssetId:string;mask:string;keepsBackground?:true};
   id: string; assetId: string; x: number; y: number; width: number;
   rotation: number; flipped: boolean; motion: DrawingMotion; speed: DrawingSpeed;
   target?: { x: number; y: number }; speech: string;

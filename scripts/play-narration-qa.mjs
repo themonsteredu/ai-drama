@@ -29,41 +29,49 @@ try{
  assert.deepEqual(repaired.scenes[0].items,repair.scenes[0].items,'repair cannot add, move or duplicate an actor');assert.notEqual(repaired.scenes[0].backgroundAssetId,'bg');assert.equal(repair.assets.length,2,'repair remains undoable');assert(validateDrawingProject(repaired));
  console.log('PASS: background-only duplicate repair preserves actor identity, count, motion and original undo state.');
  const cleanStart={...repair,scenes:repair.scenes.map(s=>({...s,items:[]}))},cutFixture={source:tiny,width:100,height:120,left:50,top:50,fullWidth:800,fullHeight:600};
- let splitResult=applySeparatedCharacter(cleanStart,repair.scenes[0].id,tiny,tiny,'주인공',cutFixture),splitProject=splitResult.project;
+ const keepBackground={mode:'keep'},eraseBackground={mode:'erase',source:tiny};
+ let splitResult=applySeparatedCharacter(cleanStart,repair.scenes[0].id,tiny,eraseBackground,'주인공',cutFixture),splitProject=splitResult.project;
  splitProject.scenes[0].items[0]={...splitProject.scenes[0].items[0],motion:'walk',target:{x:80,y:70},speech:'안녕'};
  const savedActor=structuredClone(splitProject.scenes[0].items[0]),snapshot=JSON.stringify(splitProject),count=splitProject.assets.length;
  for(let attempt=0;attempt<20;attempt++){
-  splitResult=applySeparatedCharacter(splitProject,repair.scenes[0].id,tiny,tiny,'주인공',cutFixture,savedActor.id);splitProject=splitResult.project;
+  splitResult=applySeparatedCharacter(splitProject,repair.scenes[0].id,tiny,eraseBackground,'주인공',cutFixture,savedActor.id);splitProject=splitResult.project;
   assert.equal(splitProject.scenes[0].items.length,1);assert.equal(splitProject.scenes[0].items[0].id,savedActor.id);assert.equal(splitProject.assets.length,count);
   assert.equal(splitProject.scenes[0].items[0].speech,'안녕');assert.equal(splitProject.scenes[0].items[0].motion,'walk');assert.deepEqual(splitProject.scenes[0].items[0].target,savedActor.target);assert(validateDrawingProject(splitProject));
  }
- assert.equal(parseDrawingFile(JSON.stringify(splitProject)).scenes[0].items[0].separation.mask,tiny);
+ assert.deepEqual(parseDrawingFile(JSON.stringify(splitProject)).scenes[0].items[0].separation,{sourceAssetId:'bg',mask:tiny});
  assert.equal(JSON.parse(snapshot).scenes[0].items[0].assetId,savedActor.assetId,'old snapshots remain independent');
  console.log('PASS: twenty repeated cutout corrections keep one actor, original source/mask, motion/dialogue, bounded assets and backup persistence.');
  // Keep mode (default): the stage background is not touched at all.
- const kept=applySeparatedCharacter(cleanStart,repair.scenes[0].id,tiny,null,'주인공',cutFixture).project,keptScene=kept.scenes[0];
+ const kept=applySeparatedCharacter(cleanStart,repair.scenes[0].id,tiny,keepBackground,'주인공',cutFixture).project,keptScene=kept.scenes[0];
  for(const key of ['backgroundAssetId','stillOriginalAssetId','protectedMask'])assert.deepEqual(keptScene[key],cleanStart.scenes[0][key],`keep mode leaves ${key} unchanged`);
  assert.equal(keptScene.items.length,1);assert(!kept.assets.some(a=>a.id.startsWith('scene-clean-')),'keep mode stores no erased background');
+ assert.equal(parseDrawingFile(JSON.stringify(kept)).scenes[0].items[0].separation.keepsBackground,true);
  // Two actors: A kept, B erased. Correcting A in keep mode must not bring B back into the background.
- const twoA=applySeparatedCharacter(cleanStart,repair.scenes[0].id,tiny,null,'A',cutFixture),aId=twoA.itemId;
- const twoB=applySeparatedCharacter(twoA.project,repair.scenes[0].id,tiny,tiny,'B',{...cutFixture,left:300}).project,bgB=twoB.scenes[0].backgroundAssetId;
+ const twoA=applySeparatedCharacter(cleanStart,repair.scenes[0].id,tiny,keepBackground,'A',cutFixture),aId=twoA.itemId;
+ const twoB=applySeparatedCharacter(twoA.project,repair.scenes[0].id,tiny,eraseBackground,'B',{...cutFixture,left:300}),bgB=twoB.project.scenes[0].backgroundAssetId;
  assert(bgB.startsWith('scene-clean-'));
- const fixedA=applySeparatedCharacter(twoB,repair.scenes[0].id,tiny,null,'A',cutFixture,aId).project;
- assert.equal(fixedA.scenes[0].backgroundAssetId,bgB,'correcting a kept actor keeps the other actor erased');
+ const edited={...twoB.project,assets:[...twoB.project.assets,{...repair.assets[0],id:'still-result-b'}],scenes:twoB.project.scenes.map(s=>s.id===keptScene.id?{...s,backgroundAssetId:'still-result-b',protectedMask:tiny}:s)};
+ const fixedA=applySeparatedCharacter(edited,keptScene.id,tiny,keepBackground,'A',cutFixture,aId).project;
+ assert.equal(fixedA.scenes[0].backgroundAssetId,'still-result-b');
+ assert.equal(fixedA.scenes[0].stillOriginalAssetId,bgB);
+ assert.equal(fixedA.scenes[0].protectedMask,tiny);
  assert(fixedA.assets.some(a=>a.id===bgB),'the erased background stays stored');assert.equal(fixedA.scenes[0].items.length,2);
- // When the dialog passes the current background with only A's spot restored, that becomes the stage.
- const patched=applySeparatedCharacter(twoB,repair.scenes[0].id,tiny,tiny,'A',cutFixture,aId).project;
- assert.notEqual(patched.scenes[0].backgroundAssetId,bgB);assert.equal(patched.assets.find(a=>a.id===patched.scenes[0].backgroundAssetId).source,tiny);
+ // Explicitly switching B to keep is allowed and preserves the background edit metadata.
+ const patched=applySeparatedCharacter(edited,keptScene.id,tiny,{mode:'keep',source:tiny},'B',{...cutFixture,left:300},twoB.itemId).project;
+ assert.notEqual(patched.scenes[0].backgroundAssetId,'still-result-b');
+ assert.equal(patched.scenes[0].stillOriginalAssetId,bgB);
+ assert.equal(patched.scenes[0].protectedMask,tiny);
+ assert.equal(patched.scenes[0].items[1].separation.keepsBackground,true);
  assert(validateDrawingProject(kept)&&validateDrawingProject(fixedA)&&validateDrawingProject(patched));
  console.log('PASS: keep-background separation never touches the stage background; corrections keep other actors erased.');
  // A correction that grows the cut (e.g. a missed hand on the left) moves the actor so it stays over its photo pixels.
  const scene0=cleanStart.scenes[0],oldBox={...cutFixture},newBox={...cutFixture,source:tiny,left:20,width:130};
- const first=applySeparatedCharacter(cleanStart,scene0.id,tiny,null,'주인공',oldBox),firstItem=first.project.scenes[0].items[0];
- const grown=applySeparatedCharacter(first.project,scene0.id,tiny,null,'주인공',newBox,firstItem.id,oldBox).project.scenes[0].items[0];
+ const first=applySeparatedCharacter(cleanStart,scene0.id,tiny,keepBackground,'주인공',oldBox),firstItem=first.project.scenes[0].items[0];
+ const grown=applySeparatedCharacter(first.project,scene0.id,tiny,keepBackground,'주인공',newBox,firstItem.id,oldBox).project.scenes[0].items[0];
  const expected=actorPlacement(scene0,newBox);
  assert(Math.abs(grown.x-expected.x)<1e-9&&Math.abs(grown.y-expected.y)<1e-9&&Math.abs(grown.width-expected.width)<1e-9,'corrected actor sits exactly over its new cut box');
  const moved={...first.project,scenes:first.project.scenes.map(s=>({...s,items:s.items.map(i=>({...i,x:i.x+10,target:{x:70,y:60}}))}))};
- const movedFix=applySeparatedCharacter(moved,scene0.id,tiny,null,'주인공',newBox,firstItem.id,oldBox).project.scenes[0].items[0];
+ const movedFix=applySeparatedCharacter(moved,scene0.id,tiny,keepBackground,'주인공',newBox,firstItem.id,oldBox).project.scenes[0].items[0];
  assert(Math.abs(movedFix.x-(expected.x+10))<1e-9,'a moved actor keeps its offset');assert(Math.abs(movedFix.target.x-(70+expected.x-firstItem.x))<1e-9,'its destination moves with it');
  console.log('PASS: corrected cutouts are re-anchored to their new box, keeping manual moves and destinations.');
  // Changing fit moves separated actors with the picture; a round trip returns them home.

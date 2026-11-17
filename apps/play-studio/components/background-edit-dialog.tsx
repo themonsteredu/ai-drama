@@ -11,9 +11,10 @@ type Props={project:DrawingProject;scene:DrawingScene;onApply:(p:DrawingProject)
 type MaskSnapshot={pixels:Uint8ClampedArray;result:string};
 export function BackgroundEditDialog({project,scene,onApply,onClose,mode='background',onSelect,existingItemId}:Props){
  const separating=mode==='separate',removing=mode!=='background',repairing=mode==='repair';
- // Default: the original picture stays as the background; only a copy of the actor moves.
- const [keepBackground,setKeepBackground]=useState(true),keep=separating&&keepBackground;
  const existing=scene.items.find(i=>i.id===existingItemId),existingAsset=project.assets.find(a=>a.id===existing?.assetId);
+ const existingCut=existing?.separation;
+ // Older saved cutouts used the erased background. Reopen them in that mode.
+ const [keepBackground,setKeepBackground]=useState(!existingCut||existingCut.keepsBackground===true),keep=separating&&keepBackground;
  const [name,setName]=useState(existingAsset?.name??'주인공'),[cutPreview,setCutPreview]=useState('');
  const original=project.assets.find(a=>a.id===(existing?.separation?.sourceAssetId??(removing?scene.backgroundAssetId:(scene.stillOriginalAssetId??scene.backgroundAssetId))))!;
  const dialog=useRef<HTMLDialogElement>(null),view=useRef<HTMLCanvasElement>(null),mask=useRef<HTMLCanvasElement|null>(null),image=useRef<HTMLImageElement|null>(null),last=useRef<{x:number;y:number}|null>(null),alive=useRef(true);
@@ -23,6 +24,7 @@ export function BackgroundEditDialog({project,scene,onApply,onClose,mode='backgr
  const [strength,setStrength]=useState<BackgroundStrength>('clear'),[split,setSplit]=useState(50),[comparing,setComparing]=useState(false),[protectedPercent,setProtectedPercent]=useState(0);
  const past=useRef<MaskSnapshot[]>([]),future=useRef<MaskSnapshot[]>([]),[history,setHistory]=useState({past:0,future:0});
  const current=project.assets.find(a=>a.id===scene.backgroundAssetId),comparison=result||(!removing&&current?.id!==original.id?current?.source:'');
+ const restoringErasedSpot=!!(existingCut&&!existingCut.keepsBackground&&current&&current.id!==original.id);
  const requestLock=useRef(false),toolSize=erase?eraser:brush,[maskVersion,setMaskVersion]=useState(0);
  function snapshot():MaskSnapshot{
   const m=mask.current!,data=m.getContext('2d')!.getImageData(0,0,m.width,m.height).data,pixels=new Uint8ClampedArray(m.width*m.height);
@@ -48,7 +50,23 @@ export function BackgroundEditDialog({project,scene,onApply,onClose,mode='backgr
  useEffect(()=>{
   alive.current=true;const previous=document.activeElement as HTMLElement|null;dialog.current?.showModal();
   void fetch('/api/film-background').then(r=>r.json()).then(r=>{if(alive.current){setConfigured(r.configured===true);setAuthorized(r.authenticated===true);}}).catch(()=>{if(alive.current)setConfigured(false);});
-  void (async()=>{const source=existing?.separation&&current?await restoreCharacterSelection(current.source,original.source,existing.separation.mask):original.source;const a=await rasterImage(source);if(!alive.current)return;image.current=a;const m=document.createElement('canvas');m.width=a.naturalWidth;m.height=a.naturalHeight;mask.current=m;const ctx=m.getContext('2d')!;ctx.fillStyle='#fff';ctx.fillRect(0,0,m.width,m.height);if(existing?.separation||scene.protectedMask&&!removing){const saved=await rasterImage(existing?.separation?.mask??scene.protectedMask!);if(!alive.current)return;ctx.drawImage(saved,0,0,m.width,m.height);}const c=view.current;if(c){c.width=m.width;c.height=m.height;}paint();setReady(true);})().catch(()=>setError('그림을 읽지 못했어요.'));
+  void (async()=>{
+   let source=original.source;
+   if(existingCut&&current){
+    source=restoringErasedSpot?await restoreCharacterSelection(current.source,original.source,existingCut.mask):current.source;
+   }
+   const loaded=await rasterImage(source);if(!alive.current)return;
+   image.current=loaded;
+   const m=document.createElement('canvas');m.width=loaded.naturalWidth;m.height=loaded.naturalHeight;mask.current=m;
+   const ctx=m.getContext('2d')!;ctx.fillStyle='#fff';ctx.fillRect(0,0,m.width,m.height);
+   const savedMask=existingCut?.mask??(!removing?scene.protectedMask:undefined);
+   if(savedMask){
+    const saved=await rasterImage(savedMask);if(!alive.current)return;
+    ctx.drawImage(saved,0,0,m.width,m.height);
+   }
+   const c=view.current;if(c){c.width=m.width;c.height=m.height;}
+   paint();setReady(true);
+  })().catch(()=>{if(alive.current)setError('그림을 읽지 못했어요.');});
   return()=>{alive.current=false;pending.current?.abort();previous?.focus();};
  },[]);
  function point(event:PointerEvent<HTMLCanvasElement>){const rect=event.currentTarget.getBoundingClientRect();return {x:(event.clientX-rect.left)*event.currentTarget.width/rect.width,y:(event.clientY-rect.top)*event.currentTarget.height/rect.height};}
@@ -73,7 +91,7 @@ export function BackgroundEditDialog({project,scene,onApply,onClose,mode='backgr
  },[result,separating,original.source,maskVersion]);
  async function previewRemoval(){
   if(!ready||!marked||requestLock.current)return;
-  if(keep){setResult(image.current!.src);setSplit(0);setComparing(true);return;}
+  if(keep){setResult(image.current!.src);setError('');setSplit(0);setComparing(true);return;}
   requestLock.current=true;setBusy(true);setError('');
   try{
    const cleared=prepareCharacterRemoval(image.current!,mask.current!),source=cleared.image.toDataURL('image/png');
@@ -104,7 +122,17 @@ export function BackgroundEditDialog({project,scene,onApply,onClose,mode='backgr
  async function apply(){
   if(removing){
    if(!result||requestLock.current)return;requestLock.current=true;setBusy(true);
-   try{if(!keep)await verifyCharacterRemoval(original.source,result,mask.current!);if(repairing){onApply(replaceCleanSceneBackground(project,scene.id,result));}else{const next=await separateSceneCharacter(project,scene.id,mask.current!.toDataURL('image/png'),keep?(existing?.separation&&current&&current.id!==original.id?result:null):result,name,existingItemId);onApply(next.project);onSelect?.(next.itemId);}onClose();}
+   try{
+    if(!keep)await verifyCharacterRemoval(original.source,result,mask.current!);
+    if(repairing){
+     onApply(replaceCleanSceneBackground(project,scene.id,result));
+    }else{
+     const selection=mask.current!.toDataURL('image/png');
+     const next=await separateSceneCharacter(project,scene.id,selection,keep?{mode:'keep',source:restoringErasedSpot?result:undefined}:{mode:'erase',source:result},name,existingItemId);
+     onApply(next.project);onSelect?.(next.itemId);
+    }
+    onClose();
+   }
    catch(cause){setError(cause instanceof Error?cause.message:'주인공을 분리하지 못했어요.');}
    finally{requestLock.current=false;setBusy(false);}return;
   }
