@@ -4,6 +4,7 @@ import {useEffect, useRef, useState} from 'react';
 import {classApi, submitSceneProject, type Classroom} from '@/lib/play-class-client';
 import {CLASS_SCENE_NUMBERS, type ClassSceneNumber} from '@/lib/play-class-scenes';
 import type {DrawingProject} from '@/lib/drawing-project';
+import {effectiveMusic} from '@/lib/drawing-music';
 import {submitSceneSnapshot} from '@/lib/play-scene-projection';
 import './class-scenes.css';
 
@@ -35,6 +36,8 @@ export function SceneSubmitDialog({project, selected, onSubmitted, onClose}: {
   const [busy, setBusy] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState('');
+  const sceneToSend = project.scenes.find(item => item.id === sourceScene);
+  const includesMusic = !!sceneToSend && !!effectiveMusic(project, sceneToSend);
   const dialog = useRef<HTMLDialogElement>(null);
   const lock = useRef(false);
 
@@ -84,7 +87,7 @@ export function SceneSubmitDialog({project, selected, onSubmitted, onClose}: {
   }}>
     <div className="scene-submit-heading"><h2 id="scene-submit-title">장면 제출하기</h2><button type="button" disabled={busy} onClick={onClose}>닫기</button></div>
     <p className="scene-submit-project">{project.title || '내 작품'}</p>
-    {submitted ? <p className="scene-submit-success" role="status">{room?.title} · {group}모둠 · 장면{scene} 제출 완료</p> : !room ?
+    {submitted ? <p className="scene-submit-success" role="status">{room?.title} · {group}모둠 · 장면{scene} 제출 완료{includesMusic?' · 배경음악 포함':''}</p> : !room ?
       <form onSubmit={event => {event.preventDefault(); void run(lookup);}}>
         <label htmlFor="scene-submit-code">선생님이 알려 준 수업코드 6자리</label>
         <input id="scene-submit-code" inputMode="numeric" autoComplete="off" value={code} maxLength={6} disabled={busy}
@@ -107,6 +110,7 @@ export function SceneSubmitDialog({project, selected, onSubmitted, onClose}: {
             {project.scenes.map((item, index) => <option key={item.id} value={item.id}>{index + 1}번째 · {item.title}</option>)}
           </select>
         </>}
+        <p>{includesMusic ? '배경음악도 함께 보내요.' : '이 장면에 넣은 배경음악이 없어요.'}</p>
         <button className="scene-primary" disabled={busy || !group || !scene}>{busy ? '작품을 보내고 있어요…' : '선생님께 보내기'}</button>
         {!selected && <button type="button" disabled={busy} onClick={() => {setRoom(null); setError('');}}>수업코드 다시 입력</button>}
       </form>}

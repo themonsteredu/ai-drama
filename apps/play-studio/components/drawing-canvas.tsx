@@ -7,8 +7,8 @@ import {newSpeechView,rememberSpeechView,clearSpeechLayoutCache,type SpeechBubbl
 import {createTransitionPainter,incomingTransition} from '@/lib/drawing-transition';
 import {movieTimeline} from '@/lib/drawing-movie';
 import './drawing-speech.css';
-type Props={project:DrawingProject;scene:DrawingScene;playing:boolean;storyPlaying?:boolean;reset:number;selectedId?:string;clock:MutableRefObject<number>;onError:(text:string)=>void;onDown:(e:ReactPointerEvent<HTMLCanvasElement>)=>void;onMove:(e:ReactPointerEvent<HTMLCanvasElement>)=>void;onUp:(e:ReactPointerEvent<HTMLCanvasElement>)=>void;onCancel:()=>void};
-export function DrawingCanvas({project,scene,playing,storyPlaying=false,reset,selectedId,clock,onError,onDown,onMove,onUp,onCancel}:Props){
+type Props={project:DrawingProject;scene:DrawingScene;playing:boolean;storyPlaying?:boolean;reset:number;selectedId?:string;clock:MutableRefObject<number>;audioClock:MutableRefObject<(()=>number)|null>;onError:(text:string)=>void;onDown:(e:ReactPointerEvent<HTMLCanvasElement>)=>void;onMove:(e:ReactPointerEvent<HTMLCanvasElement>)=>void;onUp:(e:ReactPointerEvent<HTMLCanvasElement>)=>void;onCancel:()=>void};
+export function DrawingCanvas({project,scene,playing,storyPlaying=false,reset,selectedId,clock,audioClock,onError,onDown,onMove,onUp,onCancel}:Props){
  const canvas=useRef<HTMLCanvasElement>(null),wrap=useRef<HTMLDivElement>(null),view=useRef(newSpeechView());
  const [fittedWidth,setFittedWidth]=useState<number>();
  useEffect(()=>{
@@ -38,7 +38,9 @@ export function DrawingCanvas({project,scene,playing,storyPlaying=false,reset,se
   const paintTransition=createTransitionPainter(),plan=movieTimeline(project);
   const transition=storyPlaying?incomingTransition(plan,plan.findIndex(step=>step.scene.id===scene.id)):null;
   const paint=(now:number)=>{
-   if(canceled)return;if(playing)clock.current+=(now-last)/1000;last=now;
+   if(canceled)return;
+   if(playing)clock.current=audioClock.current?.()??clock.current+(now-last)/1000;
+   last=now;
    if(!playing||now-lastPaint>=30){
     rememberSpeechView(scene,view.current);
     const transitioning=paintTransition(ctx,project,scene,images,clock.current,transition);
@@ -51,7 +53,7 @@ export function DrawingCanvas({project,scene,playing,storyPlaying=false,reset,se
    if(playing)raf=requestAnimationFrame(paint);
   };
   paint(performance.now());return()=>{canceled=true;cancelAnimationFrame(raf);};
- },[project,scene,images,playing,storyPlaying,reset,selectedId,clock,revision]);
+ },[project,scene,images,playing,storyPlaying,reset,selectedId,clock,audioClock,revision]);
  function turn(bubble:SpeechBubble,offset:number){view.current.cursors.set(bubble.id,{text:bubble.text,offset});setRevision(n=>n+1);}
  return <div ref={wrap} className="draw-canvas-wrap" style={fittedWidth?{width:fittedWidth}:undefined}><canvas ref={canvas} width={DRAW_WIDTH} height={DRAW_HEIGHT} className="draw-canvas" aria-label="내 그림 무대. 아래 그림 목록에서 선택한 뒤 위치를 바꿀 수 있어요." onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onCancel}>그림을 움직이는 무대입니다.</canvas>
  <div className="drawing-speech-layer">{bubbles.map(b=><div key={b.id} className="drawing-speech-box" data-speaker={b.id} data-page={b.page+1} data-pages={b.pages} style={{left:`${b.x/DRAW_WIDTH*100}%`,top:`${b.y/DRAW_HEIGHT*100}%`,width:`${b.width/DRAW_WIDTH*100}%`,height:`${b.height/DRAW_HEIGHT*100}%`}}>

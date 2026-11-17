@@ -78,8 +78,9 @@ export function newDrawingScene(id=drawingId('scene'),title='장면 1'):DrawingS
 export function emptyDrawingProject():DrawingProject{
   return {format:'moakit-drawing',version:1,id:'drawing-starter',title:'내 그림의 작은 모험',activeSceneId:'drawing-scene-1',assets:[],scenes:[newDrawingScene('drawing-scene-1')],updatedAt:'2026-09-06T00:00:00.000Z'};
 }
-export function drawingFrame(item:DrawingItem,seconds:number){
-  const duration=(item.speed==='slow'?8:item.speed==='fast'?3:5)*(item.motion==='run'?.65:1);
+export function drawingFrame(item:DrawingItem,seconds:number,dialogueSeconds=0){
+  const travelSeconds=(item.speed==='slow'?8:item.speed==='fast'?3:5)*(item.motion==='run'?.65:1);
+  const duration=dialogueSeconds>0?dialogueSeconds:travelSeconds;
   const t=Math.max(0,seconds),phase=t*(item.speed==='slow'?.65:item.speed==='fast'?1.5:1);
   const traveling=!!item.target&&item.motion!=='still';
   const progress=traveling?Math.min(1,t/duration):0;

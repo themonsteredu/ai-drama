@@ -1,6 +1,8 @@
 import type {DrawingProject,DrawingScene,DrawingMusic,DrawingMusicAsset} from '../../../packages/stage-core/src/drawing';
 
-export const MUSIC_FILE_LIMIT=3_000_000, MUSIC_TOTAL_LIMIT=24_000_000; // approximately 18MB binary after base64
+export const MUSIC_FILE_LIMIT=25_000_000,MUSIC_TOTAL_LIMIT=60_000_000,MUSIC_MAX_SECONDS=120;
+const MUSIC_STORAGE_FILE_LIMIT=12_000_000,MUSIC_STORAGE_RATE=24000;
+const musicFileTypes:Record<string,string>={mp3:'audio/mpeg',wav:'audio/wav',m4a:'audio/mp4',aac:'audio/aac',ogg:'audio/ogg',webm:'audio/webm',flac:'audio/flac'};
 // Original procedural compositions; no samples or external melodies. See docs/play-music.md.
 export const musicPresets=[
  {id:'music-happy',label:'신나는',icon:'☀️',bpm:120,notes:[72,76,79,74,77,81,79,76],bass:48},
@@ -12,11 +14,22 @@ export const musicPresets=[
 ] as const;
 export function effectiveMusic(p:DrawingProject,s:DrawingScene):DrawingMusic|null{return s.music===undefined?p.music??null:s.music;}
 export function musicPlaybackKey(s:DrawingScene){return s.musicGroup??(s.music===undefined?'all':s.id);}
-export function validMusicSource(v:unknown):v is string{return typeof v==='string'&&v.length<=4_000_100&&/^data:audio\/(mpeg|mp3|wav|x-wav|wave|mp4|x-m4a|aac|ogg|webm|flac);base64,[A-Za-z0-9+/]+={0,2}$/.test(v);}
+function musicBytes(source:string){
+ const payloadLength=source.length-source.indexOf(',')-1;
+ const padding=source.endsWith('==')?2:source.endsWith('=')?1:0;
+ return Math.floor(payloadLength*3/4)-padding;
+}
+export function musicAssetBytes(assets:readonly DrawingMusicAsset[]){
+ return assets.reduce((sum,asset)=>sum+musicBytes(asset.source),0);
+}
+export function validMusicSource(v:unknown):v is string{
+ return typeof v==='string'&&v.length<=Math.ceil(MUSIC_STORAGE_FILE_LIMIT/3)*4+40&&
+  /^data:audio\/(mpeg|mp3|wav|x-wav|wave|mp4|x-m4a|aac|ogg|webm|flac);base64,[A-Za-z0-9+/]+={0,2}$/.test(v)&&musicBytes(v)<=MUSIC_STORAGE_FILE_LIMIT;
+}
 export function validateMusic(p:Record<string,unknown>):boolean{
  const assets=p.musicAssets??[];if(!Array.isArray(assets)||assets.length>24)return false;
  const ids=new Set<string>(musicPresets.map(t=>t.id));let bytes=0;
- for(const a of assets){if(!a||typeof a!=='object'||typeof a.id!=='string'||!a.id.startsWith('audio-')||a.id.length>150||ids.has(a.id)||typeof a.name!=='string'||a.name.length>80||!validMusicSource(a.source)||typeof a.duration!=='number'||!Number.isFinite(a.duration)||a.duration<=0||a.duration>120)return false;ids.add(a.id);bytes+=a.source.length;}
+ for(const a of assets){if(!a||typeof a!=='object'||typeof a.id!=='string'||!a.id.startsWith('audio-')||a.id.length>150||ids.has(a.id)||typeof a.name!=='string'||a.name.length>80||!validMusicSource(a.source)||typeof a.duration!=='number'||!Number.isFinite(a.duration)||a.duration<=0||a.duration>MUSIC_MAX_SECONDS)return false;ids.add(a.id);bytes+=musicBytes(a.source);}
  if(bytes>MUSIC_TOTAL_LIMIT)return false;
  const valid=(v:unknown)=>v===undefined||v===null||(typeof v==='object'&&'trackId' in v&&typeof v.trackId==='string'&&ids.has(v.trackId)&&'volume' in v&&typeof v.volume==='number'&&Number.isFinite(v.volume)&&v.volume>=0&&v.volume<=1&&'loop' in v&&typeof v.loop==='boolean');
  return valid(p.music)&&Array.isArray(p.scenes)&&p.scenes.every(s=>s&&typeof s==='object'&&valid(s.music));
@@ -25,7 +38,7 @@ export function applyMusic(p:DrawingProject,music:DrawingMusic|null,all:boolean,
  const next={...p,music:all?music:p.music,scenes:p.scenes.map(s=>all?{...s,music:undefined,musicGroup:undefined}:s.id===p.activeSceneId?{...s,music,musicGroup:undefined}:s)};
  const used=new Set([next.music?.trackId,...next.scenes.map(s=>s.music?.trackId)]);
  next.musicAssets=[...(p.musicAssets??[]),...(asset&&!(p.musicAssets??[]).some(a=>a.id===asset.id)?[asset]:[])].filter(a=>used.has(a.id));
- if(next.musicAssets.reduce((n,a)=>n+a.source.length,0)>MUSIC_TOTAL_LIMIT||next.musicAssets.length>24)throw new Error('작품의 음악은 모두 합쳐 18MB, 24개까지예요. 다른 장면의 음악을 빼고 다시 골라 주세요.');
+ if(musicAssetBytes(next.musicAssets)>MUSIC_TOTAL_LIMIT||next.musicAssets.length>24)throw new Error(`작품의 음악은 모두 합쳐 ${MUSIC_TOTAL_LIMIT/1_000_000}MB, 24개까지예요. 다른 장면의 음악을 빼고 다시 골라 주세요.`);
  return next;
 }
 function synthWave(id:string):ArrayBuffer{
@@ -38,13 +51,35 @@ function synthWave(id:string):ArrayBuffer{
  return buffer;
 }
 export function synthMusic(id:string):Blob{return new Blob([synthWave(id)],{type:'audio/wav'});}
+function musicSamples(buffer:AudioBuffer){
+ const left=buffer.getChannelData(0);
+ if(buffer.numberOfChannels===1)return left;
+ const right=buffer.getChannelData(1),samples=new Float32Array(left.length*2);
+ for(let i=0;i<left.length;i++){
+  samples[i*2]=left[i];samples[i*2+1]=right[i];
+ }
+ return samples;
+}
 export async function readMusic(file:File):Promise<DrawingMusicAsset>{
- if(!file.size||file.size>MUSIC_FILE_LIMIT)throw new Error('음악 파일은 3MB 이하로 골라 주세요.');
+ if(!file.size||file.size>MUSIC_FILE_LIMIT)throw new Error(`음악 파일은 ${MUSIC_FILE_LIMIT/1_000_000}MB 이하로 골라 주세요.`);
  const ext=file.name.split('.').at(-1)?.toLowerCase()??'';
- const mime=({mp3:'audio/mpeg',wav:'audio/wav',m4a:'audio/mp4',aac:'audio/aac',ogg:'audio/ogg',webm:'audio/webm',flac:'audio/flac'} as Record<string,string>)[ext];
+ const mime=Object.hasOwn(musicFileTypes,ext)?musicFileTypes[ext]:undefined;
  if(!mime)throw new Error('MP3, WAV, M4A, AAC 등 음악 파일을 골라 주세요.');
- const source=await new Promise<string>((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result).replace(/^data:[^;]*;/,`data:${mime};`));reader.onerror=()=>reject(new Error('음악 파일을 읽지 못했어요.'));reader.readAsDataURL(file);});
- const duration=await new Promise<number>((resolve,reject)=>{const audio=new Audio();const timer=setTimeout(()=>finish(new Error('음악을 읽는 시간이 길어요. MP3나 WAV로 다시 골라 주세요.')),10000);function finish(error?:Error){clearTimeout(timer);const d=audio.duration;audio.onloadedmetadata=null;audio.onerror=null;audio.removeAttribute('src');audio.load();error?reject(error):resolve(d);}audio.onloadedmetadata=()=>Number.isFinite(audio.duration)&&audio.duration>0&&audio.duration<=120?finish():finish(new Error('음악은 2분 이하로 골라 주세요.'));audio.onerror=()=>finish(new Error('이 브라우저에서 재생할 수 없는 음악이에요. MP3나 WAV로 바꿔 주세요.'));audio.src=source;});
+ const convert=file.size>MUSIC_STORAGE_FILE_LIMIT||(ext!=='mp3'&&ext!=='wav');
+ const bytes=await file.arrayBuffer();
+ let buffer:AudioBuffer;
+ try{
+  const context=new OfflineAudioContext(2,1,MUSIC_STORAGE_RATE);
+  buffer=await context.decodeAudioData(convert?bytes:bytes.slice(0));
+ }catch{
+  throw new Error('이 기기에서 음악을 읽지 못했어요. MP3나 WAV로 바꿔 주세요.');
+ }
+ const duration=buffer.duration;
+ if(!Number.isFinite(duration)||duration<=0||duration>MUSIC_MAX_SECONDS)throw new Error(`음악은 ${MUSIC_MAX_SECONDS/60}분 이하로 골라 주세요.`);
+ const {audioDataUrl,wavBytes}=await import('./film-narration');
+ // Keep common formats as uploaded. Large or device-specific files use portable 16-bit PCM.
+ const audio=convert?new Blob([wavBytes(musicSamples(buffer),buffer.sampleRate,Math.min(2,buffer.numberOfChannels))],{type:'audio/wav'}):new Blob([bytes],{type:mime});
+ const source=await audioDataUrl(audio,'음악 파일을 읽지 못했어요.');
  return {id:`audio-${crypto.randomUUID()}`,name:file.name.slice(0,80),source,duration};
 }
 

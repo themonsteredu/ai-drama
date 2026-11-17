@@ -10,9 +10,9 @@ All six presets (신나는, 잔잔한, 모험, 긴장, 귀여운, 슬픈) are or
 
 - Optional version-1 fields preserve older project compatibility. `project.music` is common music; absent scene music inherits it; `scene.music: null` means silence; an object overrides it.
 - `musicAssets` stores each uploaded audio data URL once. Scenes only hold a track ID, volume (0–1) and loop flag. Apply-to-all clears overrides and also covers subsequently added scenes.
-- Upload: at most 3,000,000 bytes and 120 seconds per file; supported extensions MP3/WAV/M4A/AAC/OGG/WebM/FLAC, subject to actual browser codec support. Metadata loading rejects unreadable/unsupported media and times out after 10 seconds. No transcoding or uploading to a server occurs.
-- At most six referenced upload assets and 8,000,000 base64 characters (about 6MB binary) per project. Applying music prunes unreferenced audio. Repeated apply-to-all does not copy audio per scene. Undo history retains existing immutable asset strings, not serialized audio copies.
-- IndexedDB auto-save and the JSON project backup both include uploads. Total imported project file limit is 20MB (previously 12MB), alongside the unchanged 10MB raster budget. Restore validates references, settings, MIME/data URL format and per-asset/aggregate limits. Corrupt projects do not replace existing work.
+- Upload: at most 25,000,000 bytes and 120 seconds per file. Supported extensions are MP3/WAV/M4A/AAC/OGG/WebM/FLAC, subject to the device's decoder. MP3 and WAV files up to 12MB retain their original audio. Larger files and other formats are converted on the device to 24 kHz, 16-bit PCM WAV for classroom playback.
+- A project can store up to 24 uploaded tracks and 60MB of audio, measured before base64 encoding. Applying music prunes unreferenced audio. All scenes that share a track reference a single copy.
+- IndexedDB auto-save and JSON project backups include the tracks. A numbered classroom submission includes the chosen scene's active track and its audio data as part of the existing 50MB submission limit.
 - Device storage remains subject to browser quota/eviction; the existing save-failure notice directs users to export a project file. Wait for ‘이 기기에 저장됨’ before closing. PNG remains a silent still image; recorded voices and movie export are covered in `play-voice-movie.md`.
 
 ## Playback
