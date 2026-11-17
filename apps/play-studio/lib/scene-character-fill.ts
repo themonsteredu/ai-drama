@@ -67,18 +67,24 @@ export function characterRemovalChanged(original:Uint8ClampedArray,result:Uint8C
  let selected=0,changed=0,ink=0,removedInk=0;
  const height=original.length/4/width;
  const neighbors=[[-1,0],[1,0],[0,-1],[0,1],[-3,0],[3,0],[0,-3],[0,3]];
+ // A dark outline pixel is "ink" when a nearby pixel is clearly brighter.
+ function isLine(data:Uint8ClampedArray,x:number,y:number){
+  const i=(y*width+x)*4,shade=data[i]+data[i+1]+data[i+2];
+  for(const [dx,dy] of neighbors){
+   const nx=x+dx,ny=y+dy;if(nx<0||nx>=width||ny<0||ny>=height)continue;
+   const j=(ny*width+nx)*4;
+   if(data[j]+data[j+1]+data[j+2]-shade>90)return true;
+  }
+  return false;
+ }
  for(let i=0;i<original.length;i+=4)if(marks[i]<128){
   selected++;
   const different=Math.max(Math.abs(original[i]-result[i]),Math.abs(original[i+1]-result[i+1]),Math.abs(original[i+2]-result[i+2]))>24;
   if(different)changed++;
-  const x=(i/4)%width,y=Math.floor(i/4/width),shade=original[i]+original[i+1]+original[i+2];
-  let line=false;
-  for(const [dx,dy] of neighbors){
-   const nx=x+dx,ny=y+dy;if(nx<0||nx>=width||ny<0||ny>=height)continue;
-   const j=(ny*width+nx)*4;
-   if(original[j]+original[j+1]+original[j+2]-shade>90){line=true;break;}
-  }
-  if(line){ink++;if(different)removedInk++;}
+  const x=(i/4)%width,y=Math.floor(i/4/width);
+  // On a dark floor the filled background can match a dark outline's colour exactly.
+  // The outline still counts as removed when the result no longer has a line there.
+  if(isLine(original,x,y)){ink++;if(different||!isLine(result,x,y))removedInk++;}
  }
  // A small recoloring used to count as removal while almost all character lines remained.
  return selected>0&&(ink>=4?removedInk/ink>=.8:changed/selected>=.5);

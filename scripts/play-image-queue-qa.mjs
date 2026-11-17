@@ -26,6 +26,16 @@ try{
  assert(!characterRemovalChanged(lineOriginal,lineRecolor,marks,width),'recoloring the body while retaining its outline is rejected');
  assert(characterRemovalChanged(lineOriginal,filled,marks,width),'removing the whole outline and body passes');
  assert.throws(()=>seedCharacterBackground(original,new Uint8Array(width*height).fill(1),width,height));
+ // A child's drawing: dark outline + bright body standing on a black floor. Filling with the
+ // floor colour leaves the outline pixels the same colour, but the outline itself is gone.
+ const dw=24,dh=20,dark=new Uint8ClampedArray(dw*dh*4),darkMarks=new Uint8ClampedArray(dw*dh*4).fill(255);
+ for(let i=0;i<dw*dh;i++)dark.set([12,12,14,255],i*4);
+ for(let y=4;y<=15;y++)for(let x=7;x<=16;x++){darkMarks.set([0,0,0,255],(y*dw+x)*4);dark.set(x===7||x===16||y===4||y===15?[20,18,18,255]:[225,200,60,255],(y*dw+x)*4);}
+ const darkFilled=seedCharacterBackground(dark,characterRemovalMask(darkMarks,dw,dh,1),dw,dh);
+ assert(characterRemovalChanged(dark,darkFilled,darkMarks,dw),'an erased character on a dark floor is accepted');
+ assert(!characterRemovalChanged(dark,dark,darkMarks,dw),'a character left in place on a dark floor is still rejected');
+ const darkRecolor=dark.slice();for(let y=5;y<=14;y++)for(let x=8;x<=15;x++)darkRecolor.set([90,160,230,255],(y*dw+x)*4);
+ assert(!characterRemovalChanged(dark,darkRecolor,darkMarks,dw),'recoloring the body inside a kept outline on a dark floor is rejected');
  const edgeMarks=new Uint8ClampedArray(3*3*4).fill(255);edgeMarks.set([0,0,0,255],0);
  assert.equal(characterRemovalMask(edgeMarks,3,3,1).reduce((a,b)=>a+b,0),4,'edge margin is clipped, not wrapped');
  console.log('PASS: original character pixels retained, input character erased, outline padding, edge bounds and unchanged-result rejection.');
