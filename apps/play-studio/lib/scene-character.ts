@@ -68,16 +68,29 @@ export function actorPlacement(scene:DrawingScene,cut:{left:number;top:number;wi
  return {x,y,width};
 }
 
-/** background=null keeps the original picture as the stage background (nothing is erased). */
-export function applySeparatedCharacter(project:DrawingProject,sceneId:string,selection:string,background:string|null,name:string,cut:{source:string;width:number;height:number;left:number;top:number;fullWidth:number;fullHeight:number},existingItemId?:string){
+type CutBox={left:number;top:number;width:number;height:number;fullWidth:number;fullHeight:number};
+
+/** Move a corrected actor by the change of its cut box, so it stays over its own photo pixels. */
+function correctedPlacement(scene:DrawingScene,existing:DrawingItem,oldWidth:number,cut:CutBox,previous?:CutBox){
+ if(!previous)return {width:bounded(existing.width*cut.width/oldWidth,.1,100)};
+ let before,after;try{before=actorPlacement(scene,previous);after=actorPlacement(scene,cut);}catch{return {width:bounded(existing.width*cut.width/oldWidth,.1,100)};}
+ const ratio=existing.width/before.width,dx=(after.x-before.x)*ratio,dy=(after.y-before.y)*ratio;
+ return {x:bounded(existing.x+dx,0,100),y:bounded(existing.y+dy,0,100),width:bounded(after.width*ratio,.1,100),
+  ...(existing.target?{target:{x:bounded(existing.target.x+dx,0,100),y:bounded(existing.target.y+dy,0,100)}}:{})};
+}
+
+/**
+ * background=null leaves the stage background exactly as it is (nothing is erased);
+ * a string becomes the scene's new background.
+ */
+export function applySeparatedCharacter(project:DrawingProject,sceneId:string,selection:string,background:string|null,name:string,cut:{source:string}&CutBox,existingItemId?:string,previous?:CutBox){
  const scene=project.scenes.find(s=>s.id===sceneId),existing=scene?.items.find(i=>i.id===existingItemId),original=project.assets.find(a=>a.id===(existing?.separation?.sourceAssetId??scene?.backgroundAssetId));
  if(!scene||!original)throw new Error('장면 그림을 먼저 올려 주세요.');
  if(existingItemId&&!existing?.separation)throw new Error('고칠 주인공을 다시 선택해 주세요.');
  const actorId=drawingId('scene-actor'),backgroundId=drawingId('scene-clean'),oldAsset=project.assets.find(a=>a.id===existing?.assetId);
- const item:DrawingItem={id:drawingId('drawing'),...actorPlacement(scene,cut),rotation:0,flipped:false,motion:'still',speed:'normal',speech:'',...existing,assetId:actorId,separation:{sourceAssetId:original.id,mask:selection},...(existing&&oldAsset?{width:bounded(existing.width*cut.width/oldAsset.width,.1,100)}:{})};
- const stageBackgroundId=background===null?original.id:backgroundId;
+ const item:DrawingItem={id:drawingId('drawing'),...actorPlacement(scene,cut),rotation:0,flipped:false,motion:'still',speed:'normal',speech:'',...existing,assetId:actorId,separation:{sourceAssetId:original.id,mask:selection},...(existing&&oldAsset?correctedPlacement(scene,existing,oldAsset.width,cut,previous):{})};
  const assets=[...project.assets,{id:actorId,name:name.trim().slice(0,40)||'주인공',kind:'person' as const,source:cut.source,width:cut.width,height:cut.height},...(background===null?[]:[{id:backgroundId,name:`${scene.title} 빈 배경`.slice(0,40),kind:'background' as const,source:background,width:cut.fullWidth,height:cut.fullHeight}])];
- const scenes=project.scenes.map(s=>s.id!==sceneId?s:{...s,backgroundAssetId:stageBackgroundId,stillOriginalAssetId:stageBackgroundId,protectedMask:undefined,items:existing?s.items.map(i=>i.id===existing.id?item:i):[...s.items,item]});
+ const scenes=project.scenes.map(s=>s.id!==sceneId?s:{...s,...(background===null?{}:{backgroundAssetId:backgroundId,stillOriginalAssetId:backgroundId,protectedMask:undefined}),items:existing?s.items.map(i=>i.id===existing.id?item:i):[...s.items,item]});
  const used=new Set(scenes.flatMap(s=>[s.backgroundAssetId,s.stillOriginalAssetId,...s.items.flatMap(i=>[i.assetId,i.separation?.sourceAssetId])]));
  const next={...project,assets:assets.filter(a=>used.has(a.id)||!/^scene-(actor|clean)-/.test(a.id)),scenes};
  if(!validateDrawingProject(next))throw new Error('작품 보관 용량이 부족해요. 원본은 그대로 보관했어요.');
@@ -87,7 +100,8 @@ export function applySeparatedCharacter(project:DrawingProject,sceneId:string,se
 export async function separateSceneCharacter(project:DrawingProject,sceneId:string,selection:string,background:string|null,name:string,existingItemId?:string){
  const scene=project.scenes.find(s=>s.id===sceneId),existing=scene?.items.find(i=>i.id===existingItemId),source=project.assets.find(a=>a.id===(existing?.separation?.sourceAssetId??scene?.backgroundAssetId));
  if(!source)throw new Error('장면 그림을 먼저 올려 주세요.');
- return applySeparatedCharacter(project,sceneId,selection,background,name,await cutSceneCharacter(source.source,selection),existingItemId);
+ const [cut,previous]=await Promise.all([cutSceneCharacter(source.source,selection),existing?.separation?cutSceneCharacter(source.source,existing.separation.mask).catch(()=>undefined):undefined]);
+ return applySeparatedCharacter(project,sceneId,selection,background,name,cut,existingItemId,previous);
 }
 
 /** Restore only this actor's previous selection; keep other already separated actors erased. */
@@ -100,4 +114,18 @@ export async function restoreCharacterSelection(current:string,original:string,s
  ctx.clearRect(0,0,canvas.width,canvas.height);ctx.drawImage(base,0,0,canvas.width,canvas.height);const output=ctx.getImageData(0,0,canvas.width,canvas.height);
  for(let i=0;i<selected.length;i++)if(selected[i])for(let c=0;c<4;c++)output.data[i*4+c]=pixels.data[i*4+c];
  ctx.putImageData(output,0,0);return canvas.toDataURL('image/png');
+}
+
+/**
+ * Separated actors sit over their own pixels in the background. When the picture's fit
+ * changes, move them with the picture so a still actor keeps covering its photo copy.
+ */
+export function refitSeparatedActors(project:DrawingProject,sceneId:string,fit:DrawingScene['backgroundFit']):DrawingProject{
+ const scene=project.scenes.find(s=>s.id===sceneId),bg=project.assets.find(a=>a.id===scene?.backgroundAssetId);
+ if(!scene||scene.backgroundFit===fit)return project;
+ const scale=(f:DrawingScene['backgroundFit'])=>bg?(f==='cover'?Math.max(1280/bg.width,720/bg.height):Math.min(1280/bg.width,720/bg.height)):1;
+ const from=scale(scene.backgroundFit),to=scale(fit);
+ const mapX=(x:number)=>bg?bounded((((x/100*1280)-(1280-bg.width*from)/2)/from*to+(1280-bg.width*to)/2)/1280*100,0,100):x;
+ const mapY=(y:number)=>bg?bounded((((y/100*720)-(720-bg.height*from)/2)/from*to+(720-bg.height*to)/2)/720*100,0,100):y;
+ return {...project,scenes:project.scenes.map(s=>s.id!==sceneId?s:{...s,backgroundFit:fit,items:s.items.map(i=>!i.separation||!bg?i:{...i,x:mapX(i.x),y:mapY(i.y),width:bounded(i.width*to/from,.1,100),...(i.target?{target:{x:mapX(i.target.x),y:mapY(i.target.y)}}:{})})})};
 }

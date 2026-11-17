@@ -23,7 +23,7 @@ export function BackgroundEditDialog({project,scene,onApply,onClose,mode='backgr
  const [strength,setStrength]=useState<BackgroundStrength>('clear'),[split,setSplit]=useState(50),[comparing,setComparing]=useState(false),[protectedPercent,setProtectedPercent]=useState(0);
  const past=useRef<MaskSnapshot[]>([]),future=useRef<MaskSnapshot[]>([]),[history,setHistory]=useState({past:0,future:0});
  const current=project.assets.find(a=>a.id===scene.backgroundAssetId),comparison=result||(!removing&&current?.id!==original.id?current?.source:'');
- const requestLock=useRef(false),toolSize=erase?eraser:brush;
+ const requestLock=useRef(false),toolSize=erase?eraser:brush,[maskVersion,setMaskVersion]=useState(0);
  function snapshot():MaskSnapshot{
   const m=mask.current!,data=m.getContext('2d')!.getImageData(0,0,m.width,m.height).data,pixels=new Uint8ClampedArray(m.width*m.height);
   for(let i=0;i<pixels.length;i++)pixels[i]=data[i*4];
@@ -43,7 +43,7 @@ export function BackgroundEditDialog({project,scene,onApply,onClose,mode='backgr
   ctx.clearRect(0,0,c.width,c.height);ctx.drawImage(a,0,0,c.width,c.height);
   const layer=mc.getImageData(0,0,m.width,m.height);let protectedCount=0;
   for(let i=0;i<layer.data.length;i+=4){const keep=layer.data[i]<128;layer.data[i]=217;layer.data[i+1]=69;layer.data[i+2]=81;layer.data[i+3]=keep?95:0;if(keep)protectedCount++;}
-  const overlay=document.createElement('canvas');overlay.width=c.width;overlay.height=c.height;overlay.getContext('2d')?.putImageData(layer,0,0);ctx.drawImage(overlay,0,0);setMarked(protectedCount>0&&protectedCount<m.width*m.height);setProtectedPercent(Math.round(protectedCount/(m.width*m.height)*100));
+  const overlay=document.createElement('canvas');overlay.width=c.width;overlay.height=c.height;overlay.getContext('2d')?.putImageData(layer,0,0);ctx.drawImage(overlay,0,0);setMaskVersion(v=>v+1);setMarked(protectedCount>0&&protectedCount<m.width*m.height);setProtectedPercent(Math.round(protectedCount/(m.width*m.height)*100));
  }
  useEffect(()=>{
   alive.current=true;const previous=document.activeElement as HTMLElement|null;dialog.current?.showModal();
@@ -57,6 +57,12 @@ export function BackgroundEditDialog({project,scene,onApply,onClose,mode='backgr
   if(start){remember();event.currentTarget.setPointerCapture(event.pointerId);last.current=p;}
   ctx.strokeStyle=erase?'#fff':'#000';ctx.fillStyle=ctx.strokeStyle;ctx.lineWidth=toolSize;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(last.current!.x,last.current!.y);ctx.lineTo(p.x,p.y);ctx.stroke();ctx.beginPath();ctx.arc(p.x,p.y,toolSize/2,0,Math.PI*2);ctx.fill();last.current=p;setResult('');setError('');paint();
  }
+ function chooseKeep(value:boolean){
+  if(busy||value===keepBackground)return;
+  // A preview made for the other choice must not come back through undo/redo.
+  past.current=past.current.map(s=>({...s,result:''}));future.current=future.current.map(s=>({...s,result:''}));
+  setKeepBackground(value);setResult('');setComparing(false);setError('');
+ }
  function clear(){const m=mask.current;if(!m||!ready||busy)return;remember();const c=m.getContext('2d')!;c.fillStyle='#fff';c.fillRect(0,0,m.width,m.height);setResult('');setError('');paint();}
 
  useEffect(()=>{
@@ -64,10 +70,10 @@ export function BackgroundEditDialog({project,scene,onApply,onClose,mode='backgr
   if(!result||!separating){setCutPreview('');return;}
   void cutSceneCharacter(original.source,mask.current!.toDataURL('image/png')).then(cut=>{if(!canceled)setCutPreview(cut.source);}).catch(()=>{});
   return()=>{canceled=true;};
- },[result,separating,original.source]);
+ },[result,separating,original.source,maskVersion]);
  async function previewRemoval(){
   if(!ready||!marked||requestLock.current)return;
-  if(keep){setResult(original.source);setSplit(0);setComparing(true);return;}
+  if(keep){setResult(image.current!.src);setSplit(0);setComparing(true);return;}
   requestLock.current=true;setBusy(true);setError('');
   try{
    const cleared=prepareCharacterRemoval(image.current!,mask.current!),source=cleared.image.toDataURL('image/png');
@@ -98,7 +104,7 @@ export function BackgroundEditDialog({project,scene,onApply,onClose,mode='backgr
  async function apply(){
   if(removing){
    if(!result||requestLock.current)return;requestLock.current=true;setBusy(true);
-   try{if(!keep)await verifyCharacterRemoval(original.source,result,mask.current!);if(repairing){onApply(replaceCleanSceneBackground(project,scene.id,result));}else{const next=await separateSceneCharacter(project,scene.id,mask.current!.toDataURL('image/png'),keep?null:result,name,existingItemId);onApply(next.project);onSelect?.(next.itemId);}onClose();}
+   try{if(!keep)await verifyCharacterRemoval(original.source,result,mask.current!);if(repairing){onApply(replaceCleanSceneBackground(project,scene.id,result));}else{const next=await separateSceneCharacter(project,scene.id,mask.current!.toDataURL('image/png'),keep?(existing?.separation&&current&&current.id!==original.id?result:null):result,name,existingItemId);onApply(next.project);onSelect?.(next.itemId);}onClose();}
    catch(cause){setError(cause instanceof Error?cause.message:'주인공을 분리하지 못했어요.');}
    finally{requestLock.current=false;setBusy(false);}return;
   }
@@ -113,20 +119,20 @@ export function BackgroundEditDialog({project,scene,onApply,onClose,mode='backgr
  return <dialog ref={dialog} className="film-background-dialog" aria-labelledby="background-title" onKeyDown={event=>{if((event.target as HTMLElement).matches('input,textarea,select'))return;if((event.ctrlKey||event.metaKey)&&['z','y'].includes(event.key.toLowerCase())){event.preventDefault();event.stopPropagation();undo(event.shiftKey||event.key.toLowerCase()==='y');}}} onCancel={e=>{if(busy)e.preventDefault();else onClose();}}><header><div><h2 id="background-title">{repairing?'배경에 남은 주인공 지우기':separating?(existing?'이 주인공 분리 고치기':'주인공만 따로 움직이기'):'등장인물은 그대로, 배경만 다듬어요'}</h2><p>{repairing?'배경에 남아 있는 인물만 칠해 주세요. 이미 분리한 인물과 움직임은 그대로 두고 배경만 고쳐요.':separating?(keep?'움직일 주인공 한 명을 가장자리까지 칠해 주세요. 배경 사진은 원본 그대로 두고, 주인공만 따로 움직이게 해요.':'움직일 주인공 한 명을 가장자리까지 칠해 주세요. 칠한 주인공은 원래 자리에서 지우고, 따로 움직이게 해요.'):'바뀌면 안 되는 인물을 손가락으로 꼼꼼히 칠해 주세요. 빨간 부분은 원본으로 유지돼요.'}</p></div><button disabled={busy} onClick={onClose}>닫기</button></header>
   <div className="film-background-grid"><section>
    {comparison?<div className="film-comparison-tabs"><button aria-pressed={!comparing} onClick={()=>setComparing(false)}>선택 고치기</button><button aria-pressed={comparing} onClick={()=>setComparing(true)}>{removing?'분리 확인':'변경 전후 비교'}</button></div>:null}
-   <div hidden={comparing&&!!comparison}><div className="film-brush-tools"><button aria-pressed={!erase} disabled={busy} onClick={()=>setErase(false)}>{removing?'주인공 선택':'인물 보호'}</button><button aria-pressed={erase} disabled={busy} onClick={()=>setErase(true)}>지우개</button><label>{erase?'지우개':'붓'} 크기 <output>{toolSize}</output><input aria-label={erase?'지우개 크기':'선택 붓 크기'} type="range" min="8" max="160" value={toolSize} disabled={busy} onChange={e=>(erase?setEraser:setBrush)(Number(e.target.value))}/></label><button disabled={!ready||busy||!history.past} onClick={()=>undo()}>표시 실행 취소</button><button disabled={!ready||busy||!history.future} onClick={()=>undo(true)}>표시 다시 실행</button><button disabled={!ready||busy} onClick={clear}>선택 모두 지우기</button></div><p className="film-tool-help" role="status">{erase?'지우개로 빨간 선택 표시만 지워요. 원본 그림은 지워지지 않아요.':'움직이거나 보호할 인물을 칠해요. 잘못 칠한 곳은 지우개로 고쳐요.'}</p><div className={`film-mask-canvas ${erase?'is-erasing':''}`}><canvas ref={view} aria-label={removing?'주인공 선택 영역':'등장인물 보호 영역'} onPointerDown={e=>{setCursor(point(e));stroke(e,true);}} onPointerMove={e=>{setCursor(point(e));stroke(e);}} onPointerLeave={()=>setCursor(null)} onPointerUp={()=>{last.current=null;setCursor(null);}} onPointerCancel={()=>{last.current=null;setCursor(null);}}/>{cursor&&ready&&!busy&&mask.current?<i aria-hidden="true" className="film-brush-cursor" style={{left:`${cursor.x/mask.current.width*100}%`,top:`${cursor.y/mask.current.height*100}%`,width:`${toolSize/mask.current.width*100}%`,height:`${toolSize/mask.current.height*100}%`}}/>:null}</div><p className="film-mask-help">{removing?'배경에서 지울 주인공을 가장자리까지 빨갛게 칠해 주세요.':`인물만 빨갛게 칠해 주세요. 나머지 ${100-protectedPercent}% 영역의 기존 배경을 다듬어요.`}</p>{!removing&&protectedPercent>=75?<p className="film-alert">보호 표시가 넓어서 배경 변화가 작을 수 있어요. 배경에 칠한 부분은 ‘지우개’로 지워 주세요.</p>:null}</div>
+   <div hidden={comparing&&!!comparison}><div className="film-brush-tools"><button aria-pressed={!erase} disabled={busy} onClick={()=>setErase(false)}>{removing?'주인공 선택':'인물 보호'}</button><button aria-pressed={erase} disabled={busy} onClick={()=>setErase(true)}>지우개</button><label>{erase?'지우개':'붓'} 크기 <output>{toolSize}</output><input aria-label={erase?'지우개 크기':'선택 붓 크기'} type="range" min="8" max="160" value={toolSize} disabled={busy} onChange={e=>(erase?setEraser:setBrush)(Number(e.target.value))}/></label><button disabled={!ready||busy||!history.past} onClick={()=>undo()}>표시 실행 취소</button><button disabled={!ready||busy||!history.future} onClick={()=>undo(true)}>표시 다시 실행</button><button disabled={!ready||busy} onClick={clear}>선택 모두 지우기</button></div><p className="film-tool-help" role="status">{erase?'지우개로 빨간 선택 표시만 지워요. 원본 그림은 지워지지 않아요.':'움직이거나 보호할 인물을 칠해요. 잘못 칠한 곳은 지우개로 고쳐요.'}</p><div className={`film-mask-canvas ${erase?'is-erasing':''}`}><canvas ref={view} aria-label={removing?'주인공 선택 영역':'등장인물 보호 영역'} onPointerDown={e=>{setCursor(point(e));stroke(e,true);}} onPointerMove={e=>{setCursor(point(e));stroke(e);}} onPointerLeave={()=>setCursor(null)} onPointerUp={()=>{last.current=null;setCursor(null);}} onPointerCancel={()=>{last.current=null;setCursor(null);}}/>{cursor&&ready&&!busy&&mask.current?<i aria-hidden="true" className="film-brush-cursor" style={{left:`${cursor.x/mask.current.width*100}%`,top:`${cursor.y/mask.current.height*100}%`,width:`${toolSize/mask.current.width*100}%`,height:`${toolSize/mask.current.height*100}%`}}/>:null}</div><p className="film-mask-help">{keep?'따로 움직일 주인공을 가장자리까지 빨갛게 칠해 주세요.':removing?'배경에서 지울 주인공을 가장자리까지 빨갛게 칠해 주세요.':`인물만 빨갛게 칠해 주세요. 나머지 ${100-protectedPercent}% 영역의 기존 배경을 다듬어요.`}</p>{!removing&&protectedPercent>=75?<p className="film-alert">보호 표시가 넓어서 배경 변화가 작을 수 있어요. 배경에 칠한 부분은 ‘지우개’로 지워 주세요.</p>:null}</div>
    {comparison&&comparing?<div className="film-background-result"><h3>{keep?'주인공과 배경 확인':removing?'주인공을 지운 배경 확인':result?'새 배경 미리보기':'현재 적용한 배경 비교'}</h3>
     {removing?<div className="film-separation-preview">
      {separating&&cutPreview?<section><h3>움직일 주인공</h3><div className="film-actor-preview"><img src={cutPreview} alt="따로 움직일 주인공"/></div></section>:null}
-     <section><h3>{keep?'배경 (원본 그대로)':'주인공 없는 배경'}</h3><img src={comparison} alt={keep?'원본 그대로인 배경':'주인공을 지운 빈 배경'}/></section>
+     <section><h3>{keep?'배경 (지우지 않아요)':'주인공 없는 배경'}</h3><img src={comparison} alt={keep?'주인공을 지우지 않은 배경':'주인공을 지운 빈 배경'}/></section>
     </div>:<>    <div className="film-compare" style={{aspectRatio:`${original.width} / ${original.height}`}}><img src={original.source} alt="수정 전 원본 그림"/><img src={comparison} alt={removing?'선택한 주인공을 지운 배경':'배경만 수정한 결과'} style={{clipPath:`inset(0 0 0 ${split}%)`}}/><span className="film-compare-original">원본</span><span className="film-compare-edited">{result?'생성 결과':'적용된 배경'}</span><i style={{left:`${split}%`}}/></div>
     <label className="film-compare-slider">손잡이를 움직여 비교해 보세요<input type="range" min="0" max="100" value={split} aria-label="원본과 결과 비교" onChange={event=>setSplit(Number(event.target.value))}/></label>
 </>}
-    <p>{repairing?'이 배경을 적용해도 인물은 추가되지 않아요. 움직이는 인물은 그대로 유지돼요.':keep?'배경은 원본 사진 그대로예요. 주인공이 제자리에 있으면 원래 사진과 똑같이 보여요.':separating?'오른쪽 배경에 주인공이 남아 있다면 ‘선택 고치기’에서 얼굴과 몸을 더 칠해 주세요.':result?'빨갛게 보호한 인물은 원본 그대로예요. ‘이 그림 적용’을 눌러야 무대에 반영돼요.':'원본과 현재 무대의 배경을 비교하고 있어요.'}</p>
+    <p>{repairing?'이 배경을 적용해도 인물은 추가되지 않아요. 움직이는 인물은 그대로 유지돼요.':keep?'배경에서 주인공을 지우지 않아요. 주인공이 제자리에 있으면 원래 그림과 똑같이 보여요.':separating?'오른쪽 배경에 주인공이 남아 있다면 ‘선택 고치기’에서 얼굴과 몸을 더 칠해 주세요.':result?'빨갛게 보호한 인물은 원본 그대로예요. ‘이 그림 적용’을 눌러야 무대에 반영돼요.':'원본과 현재 무대의 배경을 비교하고 있어요.'}</p>
    </div>:null}</section>
   <aside>
    {separating?<label>주인공 이름<input maxLength={40} value={name} disabled={busy} onChange={e=>setName(e.target.value)}/></label>:null}
-   {separating?<fieldset className="film-background-strength"><legend>배경은 어떻게 할까요?</legend><button aria-pressed={keepBackground} disabled={busy} onClick={()=>{setKeepBackground(true);setResult('');setError('');}}>원본 배경 그대로</button><button aria-pressed={!keepBackground} disabled={busy} onClick={()=>{setKeepBackground(false);setResult('');setError('');}}>원래 자리 비우기</button></fieldset>:null}
-   {removing?<div className="film-separate-start">{keep?<><strong>배경은 그대로 둬요</strong><p>칠한 주인공만 복사해서 움직여요. 배경 사진은 하나도 바뀌지 않아요.</p></>:<><strong>칠한 곳을 비워요</strong><p>얼굴·몸·팔·다리를 모두 칠해 주세요. 빈자리는 주변 색으로 채워요.</p></>}<button className="film-primary" disabled={!ready||!marked||busy} onClick={()=>void previewRemoval()}>{busy?'처리 중…':repairing?'남은 주인공 지우기':'분리 미리보기'}</button></div>:<><p className="film-style-note"><strong>배경 구성은 그대로, 그림은 더 멋지게</strong><span>원래 있는 나무·꽃 등을 더 잘 그려요. 새 요소는 추가하지 않아요.</span></p><fieldset className="film-background-strength"><legend>얼마나 다듬을까요?</legend><button aria-pressed={strength==='clear'} disabled={busy} onClick={()=>setStrength('clear')}>더 정교하게</button><button aria-pressed={strength==='gentle'} disabled={busy} onClick={()=>setStrength('gentle')}>살짝 다듬기</button></fieldset><fieldset className="film-background-presets"><legend>다듬는 방법</legend>{backgroundPresets.map(preset=><button key={preset.name} disabled={busy} aria-pressed={prompt===preset.prompt} onClick={()=>setPrompt(preset.prompt)}>{preset.name}</button>)}</fieldset></>}
+   {separating?<fieldset className="film-background-strength"><legend>배경은 어떻게 할까요?</legend><button aria-pressed={keepBackground} disabled={busy} onClick={()=>chooseKeep(true)}>원본 배경 그대로</button><button aria-pressed={!keepBackground} disabled={busy} onClick={()=>chooseKeep(false)}>원래 자리 비우기</button></fieldset>:null}
+   {removing?<div className="film-separate-start">{keep?<><strong>배경은 그대로 둬요</strong><p>칠한 주인공만 복사해서 움직여요. 배경에서 주인공을 지우지 않아요.</p></>:<><strong>칠한 곳을 비워요</strong><p>얼굴·몸·팔·다리를 모두 칠해 주세요. 빈자리는 주변 색으로 채워요.</p></>}<button className="film-primary" disabled={!ready||!marked||busy} onClick={()=>void previewRemoval()}>{busy?'처리 중…':repairing?'남은 주인공 지우기':'분리 미리보기'}</button></div>:<><p className="film-style-note"><strong>배경 구성은 그대로, 그림은 더 멋지게</strong><span>원래 있는 나무·꽃 등을 더 잘 그려요. 새 요소는 추가하지 않아요.</span></p><fieldset className="film-background-strength"><legend>얼마나 다듬을까요?</legend><button aria-pressed={strength==='clear'} disabled={busy} onClick={()=>setStrength('clear')}>더 정교하게</button><button aria-pressed={strength==='gentle'} disabled={busy} onClick={()=>setStrength('gentle')}>살짝 다듬기</button></fieldset><fieldset className="film-background-presets"><legend>다듬는 방법</legend>{backgroundPresets.map(preset=><button key={preset.name} disabled={busy} aria-pressed={prompt===preset.prompt} onClick={()=>setPrompt(preset.prompt)}>{preset.name}</button>)}</fieldset></>}
    <details className="film-ai-options" hidden={keep} open={removing?undefined:true}>
     <summary hidden={!removing}>빈자리 더 자연스럽게 · AI</summary>
     <label>{removing?'빈자리 뒤에는 무엇이 있나요?':'배경을 어떻게 다듬을까요?'}<textarea rows={4} maxLength={600} disabled={busy} value={prompt} onChange={e=>setPrompt(e.target.value)}/></label>

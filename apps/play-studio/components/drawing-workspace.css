@@ -48,7 +48,7 @@
  .story-studio .draw-scene-upload,.story-studio .draw-scene-rotation{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin:0 0 6px}
  .story-studio .draw-scene-upload>span,.story-studio .draw-scene-rotation>strong{display:none}
  .story-studio .draw-scene-upload button,.story-studio .draw-scene-rotation button,.story-studio .draw-film-buttons button{min-height:40px;padding:6px;font-size:12px;line-height:1.45}
- .story-studio .draw-scene-upload button:first-child,.story-studio .draw-scene-rotation button:last-child{grid-column:1/-1}
+ .story-studio .draw-scene-upload button:first-child,.story-studio .draw-scene-rotation button:last-of-type,.story-studio .draw-scene-rotation>small{grid-column:1/-1}
  .story-studio .draw-scene-upload button:nth-child(2){grid-column:1/-1;min-height:32px}
  .story-studio .draw-film-buttons{display:grid;gap:5px}
  .story-studio .draw-film-buttons button{width:100%;flex:auto}
