@@ -1,4 +1,4 @@
-import {authenticated,checkPin,failure,IMAGE_MODEL,keyStatus,limitRequests,readBody,ready,reply,sameOrigin,saveApiKey,savedApiKey,sessionCookie,SettingsError} from '../../../lib/play-ai-server';
+import {authenticated,checkPin,failure,IMAGE_MODEL,keyStatus,limitRequests,readBody,ready,reply,replyWithClassroomSession,sameOrigin,saveApiKey,savedApiKey,sessionCookie,SettingsError} from '../../../lib/play-ai-server';
 export const runtime='nodejs';
 export const maxDuration=30;
 export async function GET(request:Request){
@@ -8,7 +8,7 @@ export async function GET(request:Request){
 export async function POST(request:Request){
  try{
   sameOrigin(request);const body=await readBody(request);
-  if(body.action==='logout')return reply({authenticated:false},200,{'Set-Cookie':sessionCookie(true)});
+  if(body.action==='logout')return replyWithClassroomSession({authenticated:false},true);
   if(body.action==='login'){
    await checkPin(request,body.pin);
    return reply({authenticated:true,...await keyStatus()},200,{'Set-Cookie':sessionCookie()});

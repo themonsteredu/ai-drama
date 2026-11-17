@@ -1,5 +1,5 @@
 import {randomInt,randomUUID,timingSafeEqual} from 'node:crypto';
-import {authenticated,checkPin,sessionCookie,SettingsError,playDb as db,signPlayValue as sign,reply} from './play-ai-server';
+import {authenticated,checkPin,replyWithClassroomSession,SettingsError,playDb as db,signPlayValue as sign,reply} from './play-ai-server';
 import {parseDrawingFile} from './drawing-project';
 import {movieSeconds} from './drawing-movie';
 import type {ClassGroup, SavedClassPage} from './play-class-client';
@@ -15,10 +15,11 @@ export function verify(value:string,kind:string):Claim|null{
 }
 function student(request:Request){const value=request.headers.get('cookie')?.split(';').map(s=>s.trim()).find(s=>s.startsWith(COOKIE+'='))?.slice(COOKIE.length+1);return value?verify(value,'group'):null;}
 function cookie(value=''){return `${COOKIE}=${value}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${value?28800:0}${process.env.NODE_ENV==='production'?'; Secure':''}`;}
-function teacher(request:Request){if(!authenticated(request))throw new SettingsError('교사 확인 번호로 먼저 들어가 주세요.',401);}
+function classroomTeacherAuthenticated(request:Request){return authenticated(request,'teacher')||authenticated(request);}
+function teacher(request:Request){if(!classroomTeacherAuthenticated(request))throw new SettingsError('교사 확인 번호로 먼저 들어가 주세요.',401);}
 function scope(request:Request,body:Record<string,unknown>,allowTeacher=false){
  if(!uuid(body.classId)||!groupNo(body.group))throw new SettingsError('모둠을 다시 골라 주세요.');
- const c=student(request);if(!(allowTeacher&&authenticated(request))&&(!c||c.classId!==body.classId||c.group!==body.group))throw new SettingsError('우리 모둠으로 다시 들어가 주세요.',401);
+ const c=student(request);if(!(allowTeacher&&classroomTeacherAuthenticated(request))&&(!c||c.classId!==body.classId||c.group!==body.group))throw new SettingsError('우리 모둠으로 다시 들어가 주세요.',401);
  return {classId:body.classId,group:body.group};
 }
 async function room(id:string){const r=await db(`play_classrooms?id=eq.${id}&select=*`);if(!r[0])throw new SettingsError('수업을 찾지 못했어요.',404);return r[0];}
@@ -190,7 +191,7 @@ export async function classAction(request:Request,b:Record<string,unknown>,after
  const action=b.action;
  if(action==='session'){
   const current=student(request);
-  const isTeacher=authenticated(request);
+  const isTeacher=classroomTeacherAuthenticated(request);
   const [currentRoom,rooms]=await Promise.all([
    b.includeRoom===true&&current?room(current.classId):undefined,
    b.includeRooms===true&&isTeacher?teacherRooms():undefined,
@@ -200,9 +201,9 @@ export async function classAction(request:Request,b:Record<string,unknown>,after
  if(action==='teacher-login'){
   await checkPin(request,b.pin);
   const rooms=b.includeRooms===true?await teacherRooms():undefined;
-  return reply({teacher:true,rooms},200,{'Set-Cookie':sessionCookie()});
+  return replyWithClassroomSession({teacher:true,rooms});
  }
- if(action==='teacher-logout')return reply({teacher:false},200,{'Set-Cookie':sessionCookie(true)});
+ if(action==='teacher-logout')return replyWithClassroomSession({teacher:false},true);
  if(action==='leave')return reply({ok:true},200,{'Set-Cookie':cookie()});
  if(action==='lookup'){const r=await lookup(request,b.code);return reply({room:r});}
  if(action==='join'){
@@ -245,7 +246,7 @@ export async function classAction(request:Request,b:Record<string,unknown>,after
   return reply({room:classroom,groups});
  }
  if(action==='work'){
-  const s=scope(request,b,true),r=await room(s.classId);if(!authenticated(request)&&!r.is_open)throw new SettingsError('선생님이 수업을 마쳤어요. 기기에 있는 작품은 그대로예요.',423);
+  const s=scope(request,b,true),r=await room(s.classId);if(!classroomTeacherAuthenticated(request)&&!r.is_open)throw new SettingsError('선생님이 수업을 마쳤어요. 기기에 있는 작품은 그대로예요.',423);
   const g=await group(s.classId,s.group);return reply({room:r,group:s.group,revision:g.revision,submitted:g.submitted,url:await download(g.object_path)});
  }
  if(action==='upload'){

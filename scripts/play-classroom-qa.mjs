@@ -15,6 +15,7 @@ try{
  globalThis.playQaDeferred=deferred;
  process.env.NEXT_PUBLIC_SUPABASE_URL='https://class.test';process.env.SUPABASE_SERVICE_ROLE_KEY='qa-private-secret';process.env.PLAY_SETTINGS_PIN='3035';
  const load=createRequire(path.join(temp,'entry.js')),server=load('./apps/play-studio/lib/play-class-server.js'),route=load('./apps/play-studio/app/api/play-class/route.js'),{emptyDrawingProject,newDrawingScene}=load('./apps/play-studio/lib/drawing-project.js');
+ const {authenticated}=load('./apps/play-studio/lib/play-ai-server.js');
  const {submitSceneProject,sceneProjectUrl,readClassProject}=load('./apps/play-studio/lib/play-class-client.js');
  const {submitSceneSnapshot}=load('./apps/play-studio/lib/play-scene-projection.js');
  const {assembleGroupProjects}=load('./apps/play-studio/lib/group-project.js');
@@ -88,10 +89,36 @@ try{
  assert.equal((await route.POST(req({action:'lookup',code:'123456'},'','https://evil.test'))).status,403);
  assert.equal((await call({action:'lookup',code:'12ab56'})).status,404);
  assert.equal((await call({action:'teacher-login',pin:'wrong'})).status,401);
- const teacher=await call({action:'teacher-login',pin:'3035',includeRooms:true}),tc=teacher.headers.get('set-cookie').split(';')[0];assert.equal(teacher.status,200);
+ const loginTime=Date.now();
+ const teacher=await call({action:'teacher-login',pin:process.env.PLAY_SETTINGS_PIN,includeRooms:true});assert.equal(teacher.status,200);
+ const teacherCookies=teacher.headers.getSetCookie();
+ const [settingsHeader,classroomHeader]=teacherCookies;
+ assert.match(settingsHeader,/^moakit-play-settings=.*; Max-Age=1800\b/);
+ assert.match(classroomHeader,/^moakit-play-teacher=.*; Max-Age=28800\b/);
+ assert(classroomHeader.includes('HttpOnly')&&classroomHeader.includes('SameSite=Strict'));
+ const settingsCookie=settingsHeader.split(';')[0],tc=classroomHeader.split(';')[0];
  assert.deepEqual(await teacher.json(),{teacher:true,rooms:[room]});
  assert.deepEqual(await (await call({action:'session',includeRooms:true})).json(),{teacher:false,student:null});
  assert.deepEqual(await (await call({action:'session',includeRooms:true},tc)).json(),{teacher:true,student:null,rooms:[room]});
+ assert.equal((await call({action:'list'},settingsCookie)).status,200,'existing shorter sign-ins still work');
+ assert.equal(authenticated(req({},tc.replace('moakit-play-teacher','moakit-play-settings'))),false,'the classroom cookie cannot sign into settings');
+ assert.equal(authenticated(req({},settingsCookie.replace('moakit-play-settings','moakit-play-teacher')),'teacher'),false,'a settings cookie cannot become an extended classroom session');
+ const lock=await call({action:'teacher-logout'},[settingsCookie,tc].join('; '));
+ assert.deepEqual(await lock.json(),{teacher:false});
+ assert.deepEqual(lock.headers.getSetCookie().map(cookie=>cookie.split(';')[0]),['moakit-play-settings=','moakit-play-teacher=']);
+ assert(lock.headers.getSetCookie().every(cookie=>cookie.includes('Max-Age=0')));
+ const now=Date.now;
+ try{
+  Date.now=()=>loginTime+31*60*1000;
+  assert.equal((await call({action:'list'},settingsCookie)).status,401);
+  assert.equal((await call({action:'roster',classId:id},tc)).status,200);
+  assert.equal((await call({action:'saved-projects'},tc)).status,200);
+  assert.equal((await call({action:'work',classId:id,group:1},tc)).status,200);
+  assert.equal((await call({action:'list'},tc+'tamper')).status,401);
+  Date.now=()=>loginTime+(8*60*60+60)*1000;
+  assert.equal((await call({action:'list'},tc)).status,401);
+ }finally{Date.now=now;}
+ console.log('PASS: teacher classroom sessions last eight hours, expire separately from settings and clear when locked.');
  assert.equal((await call({action:'create',title:'반',groups:2},tc)).status,200);
  assert.equal((await call({action:'create',title:'반',groups:13},tc)).status,400);
  const join=await call({action:'join',code:'123456',group:1}),sc=join.headers.get('set-cookie').split(';')[0];assert.equal(join.status,200);assert(join.headers.get('set-cookie').includes('HttpOnly'));
