@@ -1,5 +1,6 @@
 import {drawingFrame,type DrawingProject,type DrawingScene,type DrawingItem} from './drawing-project';
 import {drawAtmosphere} from './drawing-weather';
+import {actionPose,drawWalkingCutout} from './drawing-actions';
 import {renderDrawingSpeech,speechViewFor,type SpeechView,type SpeechActor} from './drawing-speech';
 export const DRAW_WIDTH=1280,DRAW_HEIGHT=720;
 export type RasterCache=Map<string,HTMLImageElement>;
@@ -12,11 +13,14 @@ export function drawDrawingScene(ctx:CanvasRenderingContext2D,p:DrawingProject,s
  for(const item of scene.items){
   const a=p.assets.find(a=>a.id===item.assetId),image=images.get(item.assetId);if(!a||!image)continue;
   const f=drawingFrame(item,seconds),iw=item.width/100*w,ih=iw*a.height/a.width,x=f.x/100*w,y=f.y/100*h,isPlant=a.kind==='plant';
-  ctx.save();ctx.translate(x,y);ctx.rotate((isPlant?item.rotation:f.angle)*Math.PI/180);ctx.scale(item.flipped?-1:1,1);
+  const pose=actionPose(item,f.phase,f.progress);
+  ctx.save();ctx.translate(x,y);ctx.rotate((isPlant?item.rotation:f.angle)*Math.PI/180);ctx.scale((item.flipped?-1:1)*pose.scaleX,pose.scaleY);
   if(isPlant&&(item.motion==='sway'||scene.weather==='wind')){
    const wind=scene.weather==='wind',amp=iw*(wind&&scene.strength==='strong'?.12:.06),dir=scene.wind==='left'?-1:1;
    const breeze=wind?dir*(1-Math.cos(seconds*1.7))*.65:Math.sin(f.phase*2);
    for(let j=0;j<64;j++){const top=j/64,srcY=top*image.naturalHeight,srcH=Math.min(image.naturalHeight-srcY,image.naturalHeight/64+1),bend=amp*(1-top)*(1-top)*breeze;ctx.drawImage(image,0,srcY,image.naturalWidth,srcH,-iw/2+bend,-ih+top*ih,iw,ih/64+1);}
+  }else if(item.motion==='walk'||item.motion==='run'){
+   drawWalkingCutout(ctx,image,iw,ih,pose.gait,item.motion==='run');
   }else if(item.motion==='swim'){
    for(let j=0;j<48;j++){const u=j/48,sx=u*image.naturalWidth,shift=Math.sin(f.phase*3.2-u*4)*ih*.055*Math.sin(f.phase);ctx.drawImage(image,sx,0,Math.min(image.naturalWidth-sx,image.naturalWidth/48+1),image.naturalHeight,-iw/2+u*iw,-ih+shift,iw/48+1,ih);}
   }else ctx.drawImage(image,-iw/2,-ih,iw,ih);

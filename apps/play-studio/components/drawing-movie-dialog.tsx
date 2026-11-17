@@ -1,36 +1,81 @@
 'use client';
 import {useEffect,useRef,useState} from 'react';
-import type {DrawingProject} from '@/lib/drawing-project';
+import type {DrawingProject,DrawingTransition} from '@/lib/drawing-project';
+import {transitionChoices} from '@/lib/drawing-transition';
 import {loadDrawingImages} from '@/lib/drawing-media';
-import {clockLabel,movieSeconds,movieSupported,recordMovie,sceneSeconds} from '@/lib/drawing-movie';
+import {clockLabel,movieSeconds,movieSupported,previewMovie,recordMovie,movieTimeline} from '@/lib/drawing-movie';
+import {DRAW_WIDTH,DRAW_HEIGHT} from '@/lib/drawing-renderer';
+import {activeNarration} from '@/lib/film-narration';
 import {downloadBlob,fileName} from '@/lib/project-files';
 import './drawing-movie.css';
 
-type Props={project:DrawingProject;onPlayStory:()=>void;onClose:()=>void};
+type Props={
+ project:DrawingProject;
+ downloadName?:string;
+ onTransition?:(sceneId:string,kind:DrawingTransition)=>void;
+ onDeleteScene?:(sceneId:string)=>void;
+ onMoveScene?:(sceneId:string,direction:-1|1)=>void;
+ onPlayStory?:()=>void;
+ onClose:()=>void;
+};
 
-export function DrawingMovieDialog({project,onPlayStory,onClose}:Props){
+export function DrawingMovieDialog({project,downloadName,onTransition,onDeleteScene,onMoveScene,onPlayStory,onClose}:Props){
  const dialog=useRef<HTMLDialogElement>(null),canceled=useRef(false),alive=useRef(true);
+ const previewCanvas=useRef<HTMLCanvasElement>(null),activePreview=useRef<AbortController|null>(null);
  // Browser support is read on the client only; the server has no MediaRecorder to ask.
  const [usable,setUsable]=useState<boolean|null>(null);
  const [busy,setBusy]=useState(false),[ratio,setRatio]=useState(0),[label,setLabel]=useState('');
  const [error,setError]=useState(''),[done,setDone]=useState('');
+ const [showPreview,setShowPreview]=useState(false),[previewing,setPreviewing]=useState(false);
+ const [previewRatio,setPreviewRatio]=useState(0),[previewLabel,setPreviewLabel]=useState('');
  useEffect(()=>{
   alive.current=true;setUsable(movieSupported());
   const previous=document.activeElement as HTMLElement|null;
   dialog.current?.showModal();
-  return()=>{alive.current=false;canceled.current=true;previous?.focus();};
+  return()=>{alive.current=false;canceled.current=true;activePreview.current?.abort();previous?.focus();};
  },[]);
- const total=movieSeconds(project);
+ const total=movieSeconds(project),narration=activeNarration(project);
  const withVoice=project.scenes.filter(s=>s.voice).length;
  function close(){if(busy)return;onClose();}
+ function stopPreview(){
+  activePreview.current?.abort();
+  activePreview.current=null;
+  setPreviewing(false);
+  setPreviewLabel('미리보기를 멈췄어요.');
+ }
+ async function watchPreview(){
+  if(busy||activePreview.current||!previewCanvas.current)return;
+  const controller=new AbortController();
+  activePreview.current=controller;
+  setShowPreview(true);setPreviewing(true);setPreviewRatio(0);setPreviewLabel('그림과 소리를 준비하고 있어요…');
+  setError('');setDone('');
+  let lastRatio=-1,lastLabel='';
+  try{
+   await previewMovie(project,previewCanvas.current,(value,text)=>{
+    if(controller.signal.aborted||!alive.current)return;
+    if(text!==lastLabel||value-lastRatio>=.01){
+     lastRatio=value;lastLabel=text;setPreviewRatio(value);setPreviewLabel(text);
+    }
+   },controller.signal);
+   if(alive.current&&!controller.signal.aborted){setPreviewRatio(1);setPreviewLabel('미리보기가 끝났어요.');}
+  }catch(cause){
+   if(alive.current&&!controller.signal.aborted){
+    setShowPreview(false);
+    setError(cause instanceof Error?cause.message:'영상 미리보기를 시작하지 못했어요. 다시 눌러 주세요.');
+   }
+  }finally{
+   if(activePreview.current===controller){activePreview.current=null;if(alive.current)setPreviewing(false);}
+  }
+ }
  async function make(){
   if(busy)return;
+  if(activePreview.current)stopPreview();
   canceled.current=false;setBusy(true);setError('');setDone('');setRatio(0);setLabel('그림을 준비하고 있어요…');
   try{
    const images=await loadDrawingImages(project.assets);
    const movie=await recordMovie(project,images,(value,text)=>{if(alive.current){setRatio(value);setLabel(text);}},()=>canceled.current);
-   downloadBlob(movie.blob,`${fileName(project.title)}.${movie.extension}`);
    if(!alive.current)return;
+   downloadBlob(movie.blob,`${downloadName??fileName(project.title)}.${movie.extension}`);
    setRatio(1);setLabel('');
    setDone(movie.lostVoices
     ?`영상을 저장했어요. 다만 목소리 ${movie.lostVoices}개는 이 기기에서 읽지 못해 빠졌어요. 담았던 기기에서 다시 만들어 주세요.`
@@ -41,31 +86,52 @@ export function DrawingMovieDialog({project,onPlayStory,onClose}:Props){
  }
  return <dialog ref={dialog} className="movie-dialog" aria-labelledby="movie-title" onCancel={event=>{if(busy)event.preventDefault();else onClose();}} onClick={event=>{if(event.target===event.currentTarget)close();}}>
   <div className="movie-content">
-   <header><div><h2 id="movie-title">🎬 영상 만들기</h2><p>장면이 차례로 넘어가며 음악과 목소리가 함께 나와요.</p></div><button type="button" aria-label="영상 창 닫기" disabled={busy} onClick={close}>×</button></header>
+   <header><div><h2 id="movie-title">영상 만들기</h2><p>{downloadName??(project.scenes.length>1?'그림과 그림 사이를 어떻게 이어 볼까요?':'이 장면을 영상으로 만들어요.')}</p></div><button type="button" aria-label="영상 창 닫기" disabled={busy} onClick={close}>×</button></header>
+
+   {!onPlayStory&&<section className="movie-preview-panel" aria-label="영상 미리보기">
+    <button type="button" className="movie-watch" disabled={busy} onClick={previewing?stopPreview:()=>void watchPreview()}>
+     {previewing?'미리보기 그만 보기':'영상 미리보기'}
+    </button>
+    <div className="movie-preview" hidden={!showPreview}>
+     <canvas ref={previewCanvas} width={DRAW_WIDTH} height={DRAW_HEIGHT} aria-label="영상 미리보기 화면"/>
+     <progress max={1} value={previewRatio} aria-label="미리보기 재생 진행"/>
+     <p role="status">{previewLabel}</p>
+    </div>
+   </section>}
 
    <ul className="movie-scenes" aria-label="장면 차례">
-    {project.scenes.map((scene,index)=><li key={scene.id}>
-     <b>{String(index+1).padStart(2,'0')}</b>
-     <span>{scene.title}</span>
-     <small>{scene.voice?`목소리 ${Math.max(1,Math.round(scene.voice.duration))}초`:'목소리 없음'} · {Math.round(sceneSeconds(scene))}초</small>
-    </li>)}
+    {movieTimeline(project).map(({scene,seconds},index)=>{
+     const background=project.assets.find(a=>a.id===scene.backgroundAssetId),selected=scene.transition??'cut';
+     return <li key={scene.id}>
+      <div className="movie-scene-card"><b>{index+1}</b>{background?<img src={background.source} alt={`${scene.title} 그림`}/>:<span className="movie-scene-empty" aria-hidden="true"/>}<div><strong>{scene.title}</strong><small>{narration?'전체 녹음':scene.voice?'녹음 있음':'녹음 없음'} · {Number(seconds.toFixed(2))}초</small></div>{onDeleteScene&&<button type="button" className="movie-delete-scene" aria-label={`${index+1}장면 지우기`} disabled={busy} onClick={()=>onDeleteScene(scene.id)}>지우기</button>}</div>
+      {onMoveScene&&project.scenes.length>1&&!narration?<div className="movie-scene-order"><button disabled={busy||index===0} aria-label={`${index+1}장면 앞으로`} onClick={()=>onMoveScene(scene.id,-1)}>앞으로</button><button disabled={busy||index===project.scenes.length-1} aria-label={`${index+1}장면 뒤로`} onClick={()=>onMoveScene(scene.id,1)}>뒤로</button></div>:null}
+      {onTransition&&index<project.scenes.length-1?<fieldset className="movie-transition" disabled={busy} aria-label={`${index+1}장면에서 ${index+2}장면으로 바꾸기`}>
+       <legend>다음 장면은</legend>
+       <div className="movie-transition-choices">{transitionChoices.map(choice=><label key={choice.id} className={selected===choice.id?'is-selected':''}>
+        <input type="radio" name={`transition-${scene.id}`} value={choice.id} checked={selected===choice.id} onChange={()=>onTransition(scene.id,choice.id)}/>
+        <span>{choice.label}</span>
+       </label>)}</div>
+       <p aria-live="polite">{transitionChoices.find(choice=>choice.id===selected)?.description}</p>
+      </fieldset>:null}
+     </li>;
+    })}
    </ul>
-   <p className="movie-total">모두 <b>{clockLabel(total)}</b>짜리 이야기예요. 목소리를 담은 장면은 {withVoice} / {project.scenes.length}개예요.</p>
+   <p className="movie-total">모두 <b>{clockLabel(total)}</b> · {narration?'전체 녹음 사용':`녹음 ${withVoice} / ${project.scenes.length}장면`}<span>녹음은 자르지 않고 끝까지 들려줘요.</span></p>
 
-   <button type="button" className="movie-watch" disabled={busy} onClick={()=>{onPlayStory();onClose();}}>▶ 처음부터 쭉 보기</button>
+   {onPlayStory&&<button type="button" className="movie-watch" disabled={busy} onClick={()=>{onPlayStory();onClose();}}>처음부터 보기</button>}
 
    {usable===false
     ?<section className="movie-fallback">
       <h3>이 기기는 영상 파일 저장이 안 돼요</h3>
-      <p>대신 <b>기기의 화면 녹화</b>로 만들 수 있어요. 소리는 「미디어 소리」로 켜 주세요. 담은 목소리가 스피커로 나오기 때문에 마이크는 켜지 않아도 돼요.</p>
+      {onPlayStory?<><p>대신 <b>기기의 화면 녹화</b>로 만들 수 있어요. 소리는 「미디어 소리」로 켜 주세요. 담은 목소리가 스피커로 나오기 때문에 마이크는 켜지 않아도 돼요.</p>
       <ol>
        <li><b>아이패드</b> — 오른쪽 위에서 아래로 쓸어내려 제어센터를 열고 ⏺(화면 기록)을 눌러요. 안 보이면 설정 &gt; 제어 센터에서 「화면 기록」을 더해요.</li>
        <li><b>갤럭시</b> — 위에서 아래로 쓸어내려 「화면 녹화」를 누르고, 소리를 「미디어 소리」로 골라요.</li>
-       <li>녹화가 시작되면 위의 <b>▶ 처음부터 쭉 보기</b>를 눌러요.</li>
+       <li>녹화가 시작되면 위의 <b>처음부터 보기</b>를 눌러요.</li>
        <li>이야기가 끝나면 녹화를 멈춰요. 영상이 사진첩에 저장돼요.</li>
-      </ol>
+      </ol></>:<p>작품 파일을 받아 PC의 Chrome에서 그림 편집기로 불러온 뒤 영상을 저장해 주세요.</p>}
      </section>
-    :<><button type="button" className="movie-make" disabled={busy||usable===null} onClick={()=>void make()}>{busy?'만드는 중…':'⬇ 영상 파일로 저장'}</button>
+    :<><button type="button" className="movie-make" disabled={busy||usable===null} onClick={()=>void make()}>{busy?'만드는 중…':'영상 저장하기'}</button>
       <p className="movie-note">이야기 길이만큼 기다려야 해요({clockLabel(total)}). 만드는 동안 화면을 그대로 두세요.</p></>}
 
    {busy?<div className="movie-progress"><div className="movie-bar"><i style={{width:`${Math.round(ratio*100)}%`}}/></div><p role="status" aria-live="polite">{label||'만드는 중…'}</p><button type="button" className="movie-cancel" onClick={()=>{canceled.current=true;}}>그만하기</button></div>:null}

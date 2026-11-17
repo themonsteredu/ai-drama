@@ -2,7 +2,7 @@ import type {DrawingProject,DrawingScene,DrawingVoice} from '../../../packages/s
 
 /** A second-grader's line is one or two sentences; twenty seconds is already generous. */
 export const VOICE_MAX_SECONDS=20;
-export const VOICE_FILE_LIMIT=1_400_000,VOICE_TOTAL_LIMIT=6_000_000;
+export const VOICE_FILE_LIMIT=1_400_000,VOICE_TOTAL_LIMIT=96_000_000;
 /** 64 kbps mono keeps a full-length take near 200 KB once base64-encoded. */
 const VOICE_BITRATE=64_000;
 
@@ -16,7 +16,7 @@ export function voiceSupported(){
  return typeof navigator!=='undefined'&&!!navigator.mediaDevices?.getUserMedia&&typeof MediaRecorder!=='undefined';
 }
 export function validVoiceSource(v:unknown):v is string{
- return typeof v==='string'&&v.length<=2_000_000&&/^data:audio\/(webm|mp4|aac|mpeg|ogg|wav|x-m4a)(;codecs=[\w.,=-]+)?;base64,[A-Za-z0-9+/]+={0,2}$/.test(v);
+ return typeof v==='string'&&v.length<=27_000_000&&/^data:audio\/(webm|mp4|aac|mpeg|ogg|wav|x-wav|x-m4a|m4a)(;codecs=[\w.,=-]+)?;base64,[A-Za-z0-9+/]+={0,2}$/.test(v);
 }
 export function voiceBytes(p:{scenes?:unknown}){
  return Array.isArray(p.scenes)?p.scenes.reduce((sum:number,s:unknown)=>{const v=(s as {voice?:{source?:unknown}})?.voice;return sum+(typeof v?.source==='string'?v.source.length:0);},0):0;
@@ -32,19 +32,20 @@ export function validateVoices(p:Record<string,unknown>):boolean{
   const v=voice as Record<string,unknown>;
   if(typeof v.id!=='string'||!v.id.startsWith('voice-')||v.id.length>150)return false;
   if(!validVoiceSource(v.source))return false;
-  if(typeof v.duration!=='number'||!Number.isFinite(v.duration)||v.duration<=0||v.duration>VOICE_MAX_SECONDS+2)return false;
+  if(typeof v.duration!=='number'||!Number.isFinite(v.duration)||v.duration<=0||v.duration>600.5)return false;
  }
  return voiceBytes(p as {scenes?:unknown})<=VOICE_TOTAL_LIMIT;
 }
 export function sceneVoice(scene:DrawingScene){return scene.voice??null;}
 export function applyVoice(p:DrawingProject,sceneId:string,voice:DrawingVoice|null):DrawingProject{
- const next={...p,scenes:p.scenes.map(s=>{
+ if(!p.scenes.some(s=>s.id===sceneId))return p;
+ const next={...p,...(voice&&p.narration?{narration:{...p.narration,enabled:false}}:{}),scenes:p.scenes.map(s=>{
   if(s.id!==sceneId)return s;
   const copy={...s};
-  if(voice)copy.voice=voice;else delete copy.voice;
+  if(voice){copy.voice=voice;delete copy.durationSeconds;}else delete copy.voice;
   return copy;
  })};
- if(voiceBytes(next)>VOICE_TOTAL_LIMIT)throw new Error('담은 목소리가 모두 합쳐 6MB를 넘어요. 다른 장면의 목소리를 지우고 다시 담아 주세요.');
+ if(voiceBytes(next)>VOICE_TOTAL_LIMIT)throw new Error('담은 목소리가 모두 합쳐 96MB를 넘어요. 다른 장면의 목소리를 지우고 다시 담아 주세요.');
  return next;
 }
 
@@ -113,12 +114,32 @@ export async function startVoiceRecording(onTick:(seconds:number)=>void):Promise
 export class VoicePlayer{
  private audio:HTMLAudioElement|null=null;
  private element(){if(!this.audio){this.audio=new Audio();this.audio.dataset.moakitVoice='true';this.audio.preload='auto';}return this.audio;}
- play(voice:DrawingVoice,onError:(message:string)=>void,onEnded?:()=>void){
+ get currentTime(){return this.audio?.currentTime??0;}
+ get paused(){return this.audio?.paused??true;}
+ play(voice:DrawingVoice,onError:(message:string)=>void,onEnded?:()=>void,onStarted?:()=>void){
   const audio=this.element();
   if(audio.dataset.voiceId!==voice.id){audio.pause();audio.dataset.voiceId=voice.id;audio.src=voice.source;}
   audio.currentTime=0;audio.onended=onEnded??null;
-  void audio.play().catch(()=>onError('담은 목소리를 들려주지 못했어요. 화면을 한 번 누르고 다시 해 볼까요?'));
+  void audio.play().then(()=>onStarted?.()).catch(()=>onError('담은 목소리를 들려주지 못했어요. 화면을 한 번 누르고 다시 해 볼까요?'));
  }
  stop(){if(this.audio){this.audio.pause();this.audio.onended=null;try{this.audio.currentTime=0;}catch{}}}
  dispose(){if(this.audio){this.audio.pause();this.audio.onended=null;this.audio.removeAttribute('src');this.audio.load();this.audio=null;}}
+}
+
+/** Existing class recordings can be imported without recording them again. */
+export const VOICE_UPLOAD_SECONDS=180,VOICE_UPLOAD_BYTES=8_000_000;
+export async function readVoice(file:File):Promise<DrawingVoice>{
+ if(!file.size||file.size>VOICE_UPLOAD_BYTES)throw new Error('대사 파일은 8MB 이하로 골라 주세요.');
+ const ext=file.name.split('.').pop()?.toLowerCase();
+ const types:Record<string,string>={mp3:'audio/mpeg',m4a:'audio/mp4',mp4:'audio/mp4',wav:'audio/wav',aac:'audio/aac',ogg:'audio/ogg',webm:'audio/webm'};
+ const type=types[ext??''];
+ if(!type)throw new Error('MP3·M4A·WAV·AAC·OGG·WEBM 녹음 파일을 골라 주세요.');
+ const data=await file.arrayBuffer();
+ const context=new AudioContext();
+ let duration:number;
+ try{const buffer=await context.decodeAudioData(data.slice(0));duration=buffer.duration;}catch{throw new Error('이 녹음 파일을 재생할 수 없어요. MP3 또는 M4A로 다시 저장해 주세요.');}finally{await context.close().catch(()=>{});}
+ if(!Number.isFinite(duration)||duration<=0||duration>VOICE_UPLOAD_SECONDS)throw new Error('대사는 장면마다 3분 이하로 넣어 주세요.');
+ const source=await new Promise<string>((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result));reader.onerror=()=>reject(new Error('녹음 파일을 읽지 못했어요.'));reader.readAsDataURL(new Blob([data],{type}));});
+ if(!validVoiceSource(source))throw new Error('지원하지 않는 녹음 형식이에요.');
+ return {id:`voice-${crypto.randomUUID()}`,source,duration};
 }
