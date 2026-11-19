@@ -12,6 +12,15 @@ export function voiceMimeType(){
  if(typeof MediaRecorder==='undefined')return '';
  return RECORD_TYPES.find(type=>{try{return MediaRecorder.isTypeSupported(type);}catch{return false;}})??'';
 }
+/**
+ * Browsers report the recorded type in their own spelling — iPad Safari may add
+ * spaces or quotes (`audio/mp4; codecs="mp4a.40.2"`) or call a voice-only take
+ * `video/mp4`. Only the container matters for playback, so keep just that.
+ */
+export function recordedType(reported:string){
+ const base=reported.split(';')[0].trim().toLowerCase().replace(/^video\//,'audio/');
+ return /^audio\/(webm|mp4|aac|mpeg|ogg|wav|x-wav|x-m4a|m4a)$/.test(base)?base:'audio/webm';
+}
 export function voiceSupported(){
  return typeof navigator!=='undefined'&&!!navigator.mediaDevices?.getUserMedia&&typeof MediaRecorder!=='undefined';
 }
@@ -87,7 +96,7 @@ export async function startVoiceRecording(onTick:(seconds:number)=>void):Promise
   recorder.onstop=()=>{
    if(settled)return;settled=true;const seconds=elapsed();release();
    if(canceled||!chunks.length){resolve(null);return;}
-   const blob=new Blob(chunks,{type:recorder.mimeType||mimeType||'audio/webm'});
+   const blob=new Blob(chunks,{type:recordedType(recorder.mimeType||mimeType)});
    if(!blob.size){resolve(null);return;}
    if(blob.size>VOICE_FILE_LIMIT){reject(new Error('목소리가 너무 길게 담겼어요. 조금 더 짧게 다시 담아 주세요.'));return;}
    const reader=new FileReader();
