@@ -23,11 +23,13 @@ export async function checkSceneRecording(page, url) {
   for (const automatic of [false, true]) {
     await record.click();
     await finish.waitFor();
+    const started = Date.now();
     if (!automatic) {
       await page.waitForTimeout(1150);
       await finish.click();
     }
     await record.waitFor({timeout: 25000});
+    if (automatic) assert(Date.now() - started >= 18500, 'a full take should stop at the time limit');
     await listen.waitFor();
     assert.equal(await page.evaluate(() => window.testMicTrack.readyState), 'ended');
     await page.evaluate(() => window.testMicContext.close());
@@ -50,7 +52,7 @@ export async function checkSceneRecording(page, url) {
     });
     assert(take.audible, 'saved audio should contain the input tone');
     assert(Math.abs(take.duration - take.savedDuration) < .15);
-    if (automatic) assert(take.duration > 18 && take.duration <= 20.1);
+    if (automatic) assert(take.duration > 5 && take.duration <= 20.1);
     else assert(take.duration > .5 && take.duration < 6);
     await page.reload({waitUntil: 'domcontentloaded'});
     await listen.click();

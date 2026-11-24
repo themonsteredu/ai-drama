@@ -54,107 +54,162 @@ function friendlyMicError(cause: unknown) {
   return '마이크를 켜지 못했어요. 사이트의 마이크 권한을 확인하고 다시 눌러 주세요.';
 }
 
+function voiceId() {
+  const id = crypto.randomUUID?.() ?? crypto.getRandomValues(new Uint32Array(4)).join('-');
+  return `voice-${id}`;
+}
+
+type CapturedAudio = {blob: Blob; pcmDuration?: number};
+
 export type VoiceSession = {
   stop: () => void;
   finished: Promise<DrawingVoice | null>;
 };
 
 // A browser can advertise a type and still reject it when the encoder starts.
-function startRecorder(stream: MediaStream) {
+function startNativeCapture(stream: MediaStream) {
   for (const type of [undefined, ...RECORD_TYPES]) {
     try {
       if (type && !MediaRecorder.isTypeSupported(type)) continue;
       const recorder = type ? new MediaRecorder(stream, {mimeType: type}) : new MediaRecorder(stream);
       recorder.start();
-      return recorder;
+      const chunks: Blob[] = [];
+      const finished = new Promise<CapturedAudio>((resolve, reject) => {
+        recorder.ondataavailable = event => { if (event.data.size) chunks.push(event.data); };
+        recorder.onerror = () => reject(new Error('녹음이 중단됐어요. 마이크 연결을 확인하고 다시 눌러 주세요.'));
+        recorder.onstop = () => resolve({blob: new Blob(chunks, {
+          type: recordedType(chunks[0]?.type ?? '') || recordedType(recorder.mimeType),
+        })});
+      });
+      return {finished, stop: () => { if (recorder.state !== 'inactive') recorder.stop(); }};
     } catch {
       // Try the next encoder on the same microphone stream.
     }
   }
-  throw new Error('이 브라우저에서 녹음을 시작할 수 없어요. Safari나 Chrome으로 열거나 이 장면에 녹음 파일을 올려 주세요.');
+  return null;
 }
 
-async function readRecordedTake(chunks: Blob[], reportedType: string, elapsed: number): Promise<DrawingVoice | null> {
-  if (!chunks.length) return null;
-  const type = recordedType(chunks[0].type) || recordedType(reportedType);
-  let blob = new Blob(chunks, {type});
-  let duration = elapsed;
-  // Short, mono WAV clips can also be played and mixed on the teacher's device.
-  try {
-    const decoder = new OfflineAudioContext(1, 1, 16000);
-    const buffer = await decoder.decodeAudioData(await blob.arrayBuffer());
-    const samples = monoSamples(buffer).subarray(0, VOICE_MAX_SECONDS * 16000);
-    if (!samples.length) return null;
-    blob = new Blob([wavBytes(samples)], {type: 'audio/wav'});
-    duration = samples.length / 16000;
-  } catch {
-    // Some browsers can play their native recordings but cannot decode them with Web Audio.
-    if (!type) throw new Error('녹음 형식을 읽지 못했어요. 이 장면에 녹음 파일을 올려 주세요.');
+// Compatibility path for browsers which can use the microphone but have no working media encoder.
+function startPcmCapture(stream: MediaStream, context: AudioContext) {
+  const input = context.createMediaStreamSource(stream);
+  const processor = context.createScriptProcessor(2048, 1, 1);
+  const chunks: Float32Array[] = [];
+  const maxFrames = VOICE_MAX_SECONDS * context.sampleRate;
+  let frames = 0;
+  processor.onaudioprocess = event => {
+    const samples = event.inputBuffer.getChannelData(0).subarray(0, maxFrames - frames);
+    if (samples.length) { chunks.push(samples.slice()); frames += samples.length; }
+  };
+  input.connect(processor);
+  processor.connect(context.destination); // The output buffer is silent; only the input is recorded.
+  let finish!: () => void;
+  const finished = new Promise<CapturedAudio>((resolve, reject) => {
+    finish = () => {
+      processor.onaudioprocess = null;
+      input.disconnect();
+      processor.disconnect();
+      if (!frames) { resolve({blob: new Blob()}); return; }
+      try {
+        const buffer = context.createBuffer(1, frames, context.sampleRate);
+        const channel = buffer.getChannelData(0);
+        let offset = 0;
+        for (const chunk of chunks) { channel.set(chunk, offset); offset += chunk.length; }
+        const samples = monoSamples(buffer);
+        resolve({blob: new Blob([wavBytes(samples)], {type: 'audio/wav'}), pcmDuration: samples.length / 16000});
+      } catch (cause) { reject(cause); }
+    };
+  });
+  return {stop: () => finish(), finished};
+}
+
+async function readRecordedTake({blob, pcmDuration}: CapturedAudio, elapsed: number): Promise<DrawingVoice | null> {
+  if (!blob.size) return null;
+  let duration = pcmDuration ?? elapsed;
+  if (pcmDuration === undefined) {
+    // Short, mono WAV clips can also be played and mixed on the teacher's device.
+    try {
+      const decoder = new OfflineAudioContext(1, 1, 16000);
+      const buffer = await decoder.decodeAudioData(await blob.arrayBuffer());
+      const samples = monoSamples(buffer).subarray(0, VOICE_MAX_SECONDS * 16000);
+      if (!samples.length) return null;
+      blob = new Blob([wavBytes(samples)], {type: 'audio/wav'});
+      duration = samples.length / 16000;
+    } catch {
+      // Some browsers can play their native recordings but cannot decode them with Web Audio.
+      if (!blob.type) throw new Error('녹음 형식을 읽지 못했어요. 이 장면에 녹음 파일을 올려 주세요.');
+    }
   }
   if (blob.size > VOICE_FILE_LIMIT) throw new Error('녹음 파일이 너무 커요. 대사를 나누어 녹음해 주세요.');
   const source = await audioDataUrl(blob);
   if (!validVoiceSource(source)) throw new Error('녹음 파일을 읽지 못했어요. 다시 녹음해 주세요.');
-  return {id: `voice-${crypto.randomUUID()}`, source, duration: Math.max(.01, Number(duration.toFixed(2)))};
+  return {id: voiceId(), source, duration: Math.max(.01, Number(duration.toFixed(2)))};
 }
 
 export async function startVoiceRecording(onTick: (seconds: number) => void, onStopping: () => void, signal: AbortSignal): Promise<VoiceSession> {
-  if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+  if (!navigator.mediaDevices?.getUserMedia) {
     throw new Error('이 화면에서는 마이크를 사용할 수 없어요. PLAY 주소를 Safari나 Chrome에서 직접 열거나 녹음 파일을 올려 주세요.');
   }
-  let stream: MediaStream;
-  try {
-    stream = await navigator.mediaDevices.getUserMedia({audio: true});
-  } catch (cause) {
-    throw new Error(friendlyMicError(cause));
+  let context: AudioContext | undefined;
+  let stream: MediaStream | undefined;
+  let timer = 0, ticker = 0;
+  function release() {
+    clearTimeout(timer);
+    clearInterval(ticker);
+    stream?.getTracks().forEach(track => track.stop());
+    if (context && context.state !== 'closed') void context.close().catch(() => {});
   }
-  const releaseMic = () => stream.getTracks().forEach(track => track.stop());
-  let recorder: MediaRecorder;
+  // Start Web Audio from the tap, before a permission prompt can consume user activation.
+  function prepareAudioContext() {
+    context = new AudioContext();
+    return context.resume().then(() => true, () => false);
+  }
+  signal.addEventListener('abort', release, {once: true});
   try {
+    const ready = typeof MediaRecorder === 'undefined' && typeof AudioContext !== 'undefined' ? prepareAudioContext() : null;
+    try { stream = await navigator.mediaDevices.getUserMedia({audio: true}); }
+    catch (cause) { throw new Error(friendlyMicError(cause)); }
     if (signal.aborted) throw new Error('녹음 요청을 취소했어요.');
-    recorder = startRecorder(stream);
+    let capture = typeof MediaRecorder === 'undefined' ? null : startNativeCapture(stream);
+    if (!capture) {
+      if (typeof AudioContext === 'undefined' || !await (ready ?? prepareAudioContext())) {
+        throw new Error('녹음을 시작할 수 없어요. Safari나 Chrome으로 열거나 녹음 파일을 올려 주세요.');
+      }
+      if (signal.aborted) throw new Error('녹음 요청을 취소했어요.');
+      capture = startPcmCapture(stream, context!);
+    }
+    const active = capture;
+    const started = performance.now();
+    const elapsed = () => Math.min(VOICE_MAX_SECONDS, (performance.now() - started) / 1000);
+    let stoppedAt: number | undefined;
+    function stop() {
+      if (stoppedAt !== undefined) return;
+      stoppedAt = elapsed();
+      clearInterval(ticker);
+      clearTimeout(timer);
+      if (!signal.aborted) onStopping();
+      active.stop();
+    }
+    const tracks = stream.getAudioTracks();
+    tracks.forEach(track => track.addEventListener('ended', stop));
+    signal.removeEventListener('abort', release);
+    signal.addEventListener('abort', stop, {once: true});
+    const finished = active.finished.finally(() => {
+      tracks.forEach(track => track.removeEventListener('ended', stop));
+      signal.removeEventListener('abort', stop);
+      release();
+    }).then(audio => {
+      if (signal.aborted) return null;
+      if (stoppedAt === undefined) onStopping();
+      return readRecordedTake(audio, stoppedAt ?? elapsed());
+    });
+    ticker = window.setInterval(() => onTick(elapsed()), 100);
+    timer = window.setTimeout(stop, VOICE_MAX_SECONDS * 1000);
+    return {stop, finished};
   } catch (cause) {
-    releaseMic();
+    signal.removeEventListener('abort', release);
+    release();
     throw cause;
   }
-
-  const chunks: Blob[] = [];
-  const started = performance.now();
-  const elapsed = () => Math.min(VOICE_MAX_SECONDS, (performance.now() - started) / 1000);
-  let stoppedAt: number | undefined;
-  let ticker = 0, timer = 0;
-  function stop() {
-    if (stoppedAt !== undefined) return;
-    stoppedAt = elapsed();
-    clearInterval(ticker);
-    clearTimeout(timer);
-    if (!signal.aborted) onStopping();
-    if (recorder.state !== 'inactive') recorder.stop();
-  }
-  const finished = new Promise<DrawingVoice | null>((resolve, reject) => {
-    recorder.ondataavailable = event => { if (event.data.size) chunks.push(event.data); };
-    function release() {
-      clearTimeout(timer);
-      clearInterval(ticker);
-      signal.removeEventListener('abort', stop);
-      recorder.onstop = recorder.onerror = recorder.ondataavailable = null;
-      releaseMic();
-    }
-    recorder.onerror = () => {
-      release();
-      reject(new Error('녹음이 중단됐어요. 마이크 연결을 확인하고 다시 눌러 주세요.'));
-    };
-    recorder.onstop = () => {
-      const seconds = stoppedAt ?? elapsed();
-      release();
-      if (signal.aborted) { resolve(null); return; }
-      if (stoppedAt === undefined) onStopping();
-      resolve(readRecordedTake(chunks, recorder.mimeType, seconds));
-    };
-  });
-  signal.addEventListener('abort', stop, {once: true});
-  ticker = window.setInterval(() => onTick(elapsed()), 100);
-  timer = window.setTimeout(stop, VOICE_MAX_SECONDS * 1000);
-  return {stop, finished};
 }
 
 /** One element at a time, so a scene change never leaves an earlier take talking. */
@@ -188,5 +243,5 @@ export async function readVoice(file:File):Promise<DrawingVoice>{
  if(!Number.isFinite(duration)||duration<=0||duration>VOICE_UPLOAD_SECONDS)throw new Error('대사는 장면마다 3분 이하로 넣어 주세요.');
  const source=await new Promise<string>((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result));reader.onerror=()=>reject(new Error('녹음 파일을 읽지 못했어요.'));reader.readAsDataURL(new Blob([data],{type}));});
  if(!validVoiceSource(source))throw new Error('지원하지 않는 녹음 형식이에요.');
- return {id:`voice-${crypto.randomUUID()}`,source,duration};
+ return {id:voiceId(),source,duration};
 }
