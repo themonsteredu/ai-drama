@@ -4,6 +4,7 @@ import {fileURLToPath} from 'node:url';
 import {spawn} from 'node:child_process';
 import {mkdir,readFile,writeFile} from 'node:fs/promises';
 import path from 'node:path';
+import {checkSceneRecording} from './play-voice-qa.mjs';
 const app=fileURLToPath(new URL('../apps/play-studio/',import.meta.url));
 const require=createRequire(path.join(app,'package.json'));
 const {chromium,webkit}=require('playwright'),{PNG}=require('pngjs');
@@ -24,6 +25,8 @@ try{
   for(const [name,engine] of [['chromium',chromium],['webkit',webkit]]){
     const browser=await engine.launch({headless:true});const context=await browser.newContext({viewport:{width:1440,height:1000},acceptDownloads:true});const page=await context.newPage();page.setDefaultTimeout(20000);const errors=[];page.on('pageerror',error=>errors.push(String(error)));page.on('dialog',dialog=>dialog.accept());
     try{
+      const micPage = await browser.newPage({viewport:{width:1024,height:768}});
+      try { await checkSceneRecording(micPage, 'http://127.0.0.1:3101/draw'); } finally { await micPage.close(); }
       await page.goto('http://127.0.0.1:3101/draw');await waitSaved(page);
       assert.equal(await page.getByRole('button',{name:'▶ 움직여 보기',exact:true}).isDisabled(),true,'empty scene must not autoplay');
       await add(page,'식물','새싹');let p=await saved(page);assert.equal(p.assets[0].kind,'plant');assert.equal(p.scenes[0].items[0].motion,'sway');assert(p.assets[0].source.startsWith('data:image/'));assert(!p.assets[0].source.includes('svg'));

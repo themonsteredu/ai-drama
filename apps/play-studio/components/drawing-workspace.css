@@ -13,6 +13,7 @@
 .draw-voice-main-actions .draw-voice-upload{width:auto;flex:1;min-width:130px}
 .draw-voice-main-actions>button{min-height:40px;padding:6px 10px;font-size:13px}
 .draw-voice-main-actions .recording{background:#b94335;color:white}
+.draw-mic-notice{grid-column:1/-1;margin:0;font-size:14px;line-height:1.5;word-break:keep-all}
 .draw-voice-timing{display:flex;align-items:center;flex-wrap:wrap;gap:4px 12px;min-height:28px}
 .draw-voice-timing small{font-size:11px;color:#796e64;margin-left:auto}
 .draw-voice-timing .draw-scene-auto{font-size:13px;margin:0}

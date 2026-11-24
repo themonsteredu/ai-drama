@@ -26,10 +26,14 @@ export function useDrawingEditor(storageKey='active',initialProject=emptyDrawing
   const savedProject=useRef<DrawingProject|null>(null);
   const [selectedId,setSelectedId]=useState<string>(),[playing,setPlaying]=useState(false),[reset,setReset]=useState(0),[destination,setDestination]=useState(false);
   const [loaded,setLoaded]=useState(false),[blocked,setBlocked]=useState(false),[saveState,setSaveState]=useState('불러오는 중'),[error,setError]=useState(''),[busy,setBusy]=useState(false);
-  const [recording,setRecording]=useState(false),[recordSeconds,setRecordSeconds]=useState(0),[storyPlaying,setStoryPlaying]=useState(false),[voicePlaying,setVoicePlaying]=useState(false);
+  const [voicePhase, setVoicePhase] = useState<'idle' | 'requesting' | 'recording' | 'saving'>('idle');
+  const recording = voicePhase !== 'idle';
+  const [voiceError, setVoiceError] = useState('');
+  const [recordSeconds,setRecordSeconds]=useState(0),[storyPlaying,setStoryPlaying]=useState(false),[voicePlaying,setVoicePlaying]=useState(false);
   const musicPlayer=useRef<DrawingMusicPlayer|null>(null),voicePlayer=useRef<VoicePlayer|null>(null);
-  const session=useRef<VoiceSession|null>(null),storyTimer=useRef(0),storyOn=useRef(false),storyEpoch=useRef(0);
-  useEffect(()=>()=>{musicPlayer.current?.dispose();voicePlayer.current?.dispose();session.current?.cancel();clearTimeout(storyTimer.current);},[]);
+  const voiceRequest = useRef<{controller: AbortController; session?: VoiceSession} | null>(null);
+  const storyTimer=useRef(0),storyOn=useRef(false),storyEpoch=useRef(0);
+  useEffect(()=>()=>{musicPlayer.current?.dispose();voicePlayer.current?.dispose();voiceRequest.current?.controller.abort();voiceRequest.current=null;clearTimeout(storyTimer.current);},[]);
   const clock=useRef(0),audioClock=useRef<(()=>number)|null>(null),past=useRef<DrawingProject[]>([]),future=useRef<DrawingProject[]>([]);
   const drag=useRef<{id:string;pointerId:number;dx:number;dy:number;start:DrawingProject;moved:boolean}|null>(null);
   const scene=project.scenes.find(s=>s.id===project.activeSceneId)??project.scenes[0],selected=scene.items.find(i=>i.id===selectedId),selectedAsset=project.assets.find(a=>a.id===selected?.assetId);
@@ -126,21 +130,44 @@ export function useDrawingEditor(storageKey='active',initialProject=emptyDrawing
   function cancel(){if(drag.current){setValue(drag.current.start);drag.current=null;}}
   async function importWork(file:File){setBusy(true);try{if(file.size>DRAWING_FILE_LIMIT)throw new Error('작품 파일은 320MB 이하로 골라 주세요.');const next=parseDrawingFile(await file.text());await loadDrawingImages(next.assets);if(!confirm('불러온 작품으로 바꿀까요? 현재 작품은 먼저 파일로 보관해 주세요.'))return;setBlocked(false);commit(()=>next);setError('');setSelectedId(undefined);setDestination(false);}catch(cause){setError(cause instanceof Error?cause.message:'작품을 읽지 못했어요.');}finally{setBusy(false);}}
   function backup(){const blob=new Blob([JSON.stringify(project)],{type:'application/json'});if(blob.size>DRAWING_FILE_LIMIT){setError('작품 파일이 320MB를 넘어요. 사용하지 않는 그림이나 음악을 줄여 주세요.');return;}downloadBlob(blob,`${fileName(project.title)}.moakit-drawing.json`);}
-  async function startVoice(){
-    if(!loaded||recording||session.current)return;
-    stop();setError('');setRecordSeconds(0);
-    try{session.current=await startVoiceRecording(setRecordSeconds);setRecording(true);}
-    catch(cause){session.current=null;setRecording(false);setError(cause instanceof Error?cause.message:'마이크를 켜지 못했어요.');}
+  async function startVoice() {
+    if (!loaded || busy || voiceRequest.current) return;
+    const controller = new AbortController();
+    const request: {controller: AbortController; session?: VoiceSession} = {controller};
+    voiceRequest.current = request;
+    const projectId = projectRef.current.id, sceneId = projectRef.current.activeSceneId;
+    stop();
+    setError('');
+    setVoiceError('');
+    setRecordSeconds(0);
+    setVoicePhase('requesting');
+    try {
+      const session = await startVoiceRecording(setRecordSeconds, () => setVoicePhase('saving'), controller.signal);
+      request.session = session;
+      if (!controller.signal.aborted) setVoicePhase('recording');
+      // Manual stop, the time limit and a disconnected microphone all finish here.
+      const voice = await session.finished;
+      if (controller.signal.aborted) return;
+      if (!voice) throw new Error('담긴 소리가 없어요. 직접 녹음을 누르고 말한 뒤 녹음 완료를 눌러 주세요.');
+      commit(p => p.id === projectId ? applyVoice(p, sceneId, voice) : p);
+    } catch (cause) {
+      if (!controller.signal.aborted) setVoiceError(cause instanceof Error ? cause.message : '녹음을 마치지 못했어요. 다시 눌러 주세요.');
+    } finally {
+      if (voiceRequest.current === request) {
+        voiceRequest.current = null;
+        setVoicePhase('idle');
+        setRecordSeconds(0);
+      }
+    }
   }
-  async function finishVoice(){
-    const active=session.current;if(!active)return;
-    session.current=null;setRecording(false);
-    try{
-      const voice=await active.stop();
-      if(!voice){setError('담긴 소리가 없어요. 버튼을 누르고 말한 다음 다시 눌러 주세요.');return;}
-      commit(p=>applyVoice(p,p.activeSceneId,voice));setError('');
-    }catch(cause){setError(cause instanceof Error?cause.message:'녹음을 마치지 못했어요. 다시 해 볼까요?');}
-    finally{setRecordSeconds(0);}
+  function finishVoice() {
+    voiceRequest.current?.session?.stop();
+  }
+  function cancelVoiceRequest() {
+    if (voicePhase !== 'requesting') return;
+    voiceRequest.current?.controller.abort();
+    voiceRequest.current = null;
+    setVoicePhase('idle');
   }
   function playVoice(){
     const voice=scene.voice;if(!voice)return;
@@ -210,6 +237,6 @@ export function useDrawingEditor(storageKey='active',initialProject=emptyDrawing
     });
   }
   async function png(){setBusy(true);try{const snapshot=projectRef.current,current=snapshot.scenes.find(s=>s.id===snapshot.activeSceneId)!;const images=await loadDrawingImages(snapshot.assets);await document.fonts.ready;const c=document.createElement('canvas');c.width=2560;c.height=1440;const ctx=c.getContext('2d');if(!ctx)throw new Error('이미지를 만들지 못했어요.');ctx.scale(2,2);drawDrawingScene(ctx,snapshot,current,images,clock.current);const blob=await new Promise<Blob>((resolve,reject)=>c.toBlob(b=>b?resolve(b):reject(new Error('저장에 실패했어요.')),'image/png'));downloadBlob(blob,`${fileName(snapshot.title)}-${fileName(current.title)}.png`);}catch(cause){setError(cause instanceof Error?cause.message:'이미지를 만들지 못했어요.');}finally{setBusy(false);}}
-  return {recording,recordSeconds,startVoice,finishVoice,playVoice,stopVoice,removeVoice,voicePlaying,storyPlaying,playStory,maxVoiceSeconds:VOICE_MAX_SECONDS,
+  return {recording,voicePhase,voiceError,setVoiceError,cancelVoiceRequest,recordSeconds,startVoice,finishVoice,playVoice,stopVoice,removeVoice,voicePlaying,storyPlaying,playStory,maxVoiceSeconds:VOICE_MAX_SECONDS,
     project,scene,selected,selectedAsset,selectedId,playing,start,pause,reset,clock,audioClock,destination,setDestination,loaded,blocked,saveState,error,setError,busy,commit,stop,editScene,patchItem,undo,redo,canUndo:past.current.length>0,canRedo:future.current.length>0,place,chooseItem,remove,removeAsset,removeBackground,rotateScene,duplicate,layer,addScene,switchScene,deleteScene,newWork,down,move,up,cancel,importWork,backup,png};
 }
