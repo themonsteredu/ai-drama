@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 // Exercise the real encoder and editor, with a tone instead of a physical microphone.
 export async function checkSceneRecording(page, url) {
   await page.addInitScript(() => {
-    navigator.mediaDevices.getUserMedia = async () => {
+    const devices = Object.getPrototypeOf(navigator.mediaDevices);
+    devices.getUserMedia = async () => {
       const context = new AudioContext();
       await context.resume();
       const tone = context.createOscillator();
@@ -61,7 +62,7 @@ export async function checkSceneRecording(page, url) {
     await panel.getByRole('button', {name:'이 장면 대사 멈추기'}).click();
   }
   await page.evaluate(() => {
-    navigator.mediaDevices.getUserMedia = () => Promise.reject(new DOMException('denied', 'NotAllowedError'));
+    Object.getPrototypeOf(navigator.mediaDevices).getUserMedia = () => Promise.reject(new DOMException('denied', 'NotAllowedError'));
   });
   await record.click();
   await panel.getByRole('alert').filter({hasText:'마이크를 허용'}).waitFor();
